@@ -414,12 +414,15 @@ export default function App() {
           />
 
           <input
-            style={styles.input}
-            type="password"
-            placeholder="Лозинка"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+  style={styles.input}
+  type="password"
+  placeholder="Лозинка"
+  value={password}
+  onChange={(e) => setPassword(e.target.value)}
+  onKeyDown={(e) => {
+    if (e.key === 'Enter') login()
+  }}
+/>
 
           <button style={styles.primaryButton} onClick={login}>
             Најави се
