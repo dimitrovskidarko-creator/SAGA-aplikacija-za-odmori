@@ -6,264 +6,340 @@ const supabase = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5bnl6aGl5ZGRleHZweG1vZHhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MTk3NjYsImV4cCI6MjA5Mjk5NTc2Nn0.V0_R1YPyCvKAqvE50J-oafL4lRXgnWOtsIPzwZcgyRU'
 )
 
-const VERSION = 'v1.15'
+const VERSION = 'v1.17'
+const APP_NAME = 'SAGA апликација за одмори'
+const EMAIL_FUNCTION_URL =
+  'https://iynyzhiyddexvpxmodxi.supabase.co/functions/v1/send-email-notification'
+
+async function sendEmailNotification(payload) {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    const res = await fetch(EMAIL_FUNCTION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session?.access_token}`,
+      },
+      body: JSON.stringify(payload),
+    })
+
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) console.error('EMAIL ERROR:', data)
+  } catch (err) {
+    console.error('EMAIL CRASH:', err)
+  }
+}
 
 export default function App() {
   const [session, setSession] = useState(null)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(true)
 
-  const [profile, setProfile] = useState(null)
+  const [role, setRole] = useState('')
+  const [fullName, setFullName] = useState('')
+
+  const [loginEmail, setLoginEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+
   const [employees, setEmployees] = useState([])
   const [leaves, setLeaves] = useState([])
+  const [myEmployee, setMyEmployee] = useState(null)
 
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [reason, setReason] = useState('Одмор')
 
-  const [newPassword, setNewPassword] = useState('')
+  const [currentDate, setCurrentDate] = useState(new Date())
 
-  const [newEmployeeName, setNewEmployeeName] = useState('')
-  const [newEmployeeEmail, setNewEmployeeEmail] = useState('')
-  const [newEmployeeRole, setNewEmployeeRole] = useState('employee')
-  const [newEmployeeDays, setNewEmployeeDays] = useState(20)
+  const [editingEmployeeId, setEditingEmployeeId] = useState('')
+  const [editName, setEditName] = useState('')
+  const [editEmail, setEditEmail] = useState('')
+  const [editTotalDays, setEditTotalDays] = useState(20)
+  const [editUsedDays, setEditUsedDays] = useState(0)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
+      if (data.session) loadAll(data.session.user)
+      setLoading(false)
     })
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession)
+      if (newSession) loadAll(newSession.user)
     })
 
-    return () => subscription.unsubscribe()
+    return () => listener.subscription.unsubscribe()
   }, [])
 
-  useEffect(() => {
-    if (session) {
-      loadData()
-    }
-  }, [session])
+  async function loadAll(user) {
+    await loadProfile(user)
+    await loadEmployees(user.email)
+    await loadLeaves()
+  }
 
-  async function loadData() {
-    const userEmail = session.user.email
-
-    const { data: profileData } = await supabase
+  async function loadProfile(user) {
+    const { data } = await supabase
       .from('profiles')
       .select('*')
-      .eq('email', userEmail)
-      .single()
+      .eq('id', user.id)
+      .maybeSingle()
 
-    setProfile(profileData)
+    setRole(data?.role || 'employee')
+    setFullName(data?.full_name || user.email)
+  }
 
-    const { data: employeesData } = await supabase
+  async function loadEmployees(userEmail) {
+    const { data, error } = await supabase
       .from('employees')
       .select('*')
       .order('full_name')
 
-    setEmployees(employeesData || [])
+    if (error) return alert(error.message)
 
-    const { data: leaveData } = await supabase
+    setEmployees(data || [])
+    setMyEmployee((data || []).find((e) => e.email === userEmail) || null)
+  }
+
+  async function loadLeaves() {
+    const { data, error } = await supabase
       .from('leave_requests')
       .select('*')
       .order('start_date')
 
-    setLeaves(leaveData || [])
+    if (error) return alert(error.message)
+    setLeaves(data || [])
   }
 
-  async function login(e) {
-    e.preventDefault()
+  async function login() {
+    if (!loginEmail || !password) return alert('Внеси email и лозинка')
 
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      email: loginEmail,
       password,
     })
 
-    if (error) {
-      alert(error.message)
+    if (error) alert(error.message)
+  }
+
+  async function changePassword() {
+    if (!newPassword || newPassword.length < 6) {
+      return alert('Лозинката мора да има минимум 6 карактери')
     }
+
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    })
+
+    if (error) return alert(error.message)
+
+    alert('Лозинката е променета ✅')
+    setNewPassword('')
   }
 
   async function logout() {
     await supabase.auth.signOut()
+    window.location.reload()
   }
 
-  async function submitLeave() {
-    const employee = employees.find((e) => e.email === session.user.email)
-
-    if (!employee) return
+  async function submitLeaveRequest() {
+    if (!myEmployee?.id) return alert('Нема employee запис')
+    if (!startDate || !endDate) return alert('Избери датуми')
+    if (endDate < startDate) return alert('Крајниот датум не може да биде пред почетниот')
 
     const { error } = await supabase.from('leave_requests').insert({
-      employee_id: employee.id,
-      employee_name: employee.full_name,
+      employee_id: myEmployee.id,
       start_date: startDate,
       end_date: endDate,
       reason,
       status: 'pending',
     })
 
-    if (error) {
-      alert(error.message)
-      return
-    }
+    if (error) return alert(error.message)
 
-    alert('Барањето е испратено')
+    await sendEmailNotification({
+      type: 'new_request',
+      employeeName: myEmployee.full_name,
+      employeeEmail: myEmployee.email,
+      startDate,
+      endDate,
+      reason,
+    })
 
+    alert('Барањето е испратено ✅')
     setStartDate('')
     setEndDate('')
     setReason('Одмор')
-
-    loadData()
+    await loadLeaves()
   }
 
   async function updateLeaveStatus(leave, status) {
+    const emp = employees.find((e) => e.id === leave.employee_id)
+
     const { error } = await supabase
       .from('leave_requests')
       .update({
         status,
+        approved_by: fullName,
       })
       .eq('id', leave.id)
 
-    if (error) {
-      alert(error.message)
-      return
+    if (error) return alert(error.message)
+
+    if (status === 'approved' && emp && leave.reason !== 'Боледување') {
+      const days = countDays(leave.start_date, leave.end_date)
+
+      await supabase
+        .from('employees')
+        .update({
+          leave_days_used: Number(emp.leave_days_used || 0) + days,
+        })
+        .eq('id', emp.id)
     }
 
-    if (status === 'approved') {
-      const emp = employees.find((e) => e.id === leave.employee_id)
-
-      if (emp) {
-        const days = countDays(leave.start_date, leave.end_date)
-
-        await supabase
-          .from('employees')
-          .update({
-            leave_days_used:
-              Number(emp.leave_days_used || 0) + Number(days),
-          })
-          .eq('id', emp.id)
-      }
-    }
-
-    loadData()
-  }
-
-  async function addEmployee() {
-    const { error } = await supabase.from('employees').insert({
-      full_name: newEmployeeName,
-      email: newEmployeeEmail,
-      role: newEmployeeRole,
-      leave_days_total: Number(newEmployeeDays),
-      leave_days_used: 0,
+    await sendEmailNotification({
+      type: 'request_status',
+      employeeName: emp?.full_name,
+      employeeEmail: emp?.email,
+      startDate: leave.start_date,
+      endDate: leave.end_date,
+      reason: leave.reason,
+      status,
     })
 
-    if (error) {
-      alert(error.message)
-      return
-    }
-
-    alert('Вработениот е додаден')
-
-    setNewEmployeeName('')
-    setNewEmployeeEmail('')
-    setNewEmployeeRole('employee')
-    setNewEmployeeDays(20)
-
-    loadData()
+    await loadEmployees(session.user.email)
+    await loadLeaves()
   }
 
-  async function deleteEmployee(id) {
-    await supabase.from('employees').delete().eq('id', id)
-    loadData()
+  function startEditEmployee(emp) {
+    setEditingEmployeeId(emp.id)
+    setEditName(emp.full_name || '')
+    setEditEmail(emp.email || '')
+    setEditTotalDays(Number(emp.leave_days_total || 0))
+    setEditUsedDays(Number(emp.leave_days_used || 0))
   }
 
-  async function updatePassword() {
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword,
-    })
+  function cancelEditEmployee() {
+    setEditingEmployeeId('')
+    setEditName('')
+    setEditEmail('')
+    setEditTotalDays(20)
+    setEditUsedDays(0)
+  }
 
-    if (error) {
-      alert(error.message)
-      return
-    }
+  async function saveEmployeeEdit() {
+    if (role !== 'hr') return alert('Само HR може да едитира')
+    if (!editingEmployeeId) return
+    if (!editName || !editEmail) return alert('Внеси име и email')
 
-    alert('Лозинката е променета')
-    setNewPassword('')
+    const { error } = await supabase
+      .from('employees')
+      .update({
+        full_name: editName,
+        email: editEmail,
+        leave_days_total: Number(editTotalDays || 0),
+        leave_days_used: Number(editUsedDays || 0),
+      })
+      .eq('id', editingEmployeeId)
+
+    if (error) return alert(error.message)
+
+    alert('Вработениот е ажуриран ✅')
+    cancelEditEmployee()
+    await loadEmployees(session.user.email)
   }
 
   function countDays(start, end) {
     const s = new Date(start)
     const e = new Date(end)
+    return Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1
+  }
 
-    return (
-      Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1
+  function formatDate(date) {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+
+  function formatDisplayDate(dateString) {
+    if (!dateString) return ''
+    const d = new Date(dateString)
+    return d.toLocaleDateString('mk-MK', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    })
+  }
+
+  function getCalendarDays() {
+    const year = currentDate.getFullYear()
+    const month = currentDate.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const lastDay = new Date(year, month + 1, 0)
+    const startOffset = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1
+    const days = []
+
+    for (let i = 0; i < startOffset; i++) days.push(null)
+    for (let d = 1; d <= lastDay.getDate(); d++) days.push(new Date(year, month, d))
+    while (days.length % 7 !== 0) days.push(null)
+
+    return days
+  }
+
+  function getLeavesForDay(day) {
+    if (!day) return []
+    const d = formatDate(day)
+
+    return leaves.filter(
+      (l) => l.status === 'approved' && d >= l.start_date && d <= l.end_date
     )
   }
 
-  const role = profile?.role || 'employee'
-
-  const myEmployee = employees.find(
-    (e) => e.email === session?.user?.email
-  )
-
-  const approvedLeaves = useMemo(() => {
-    return leaves.filter((l) => l.status === 'approved')
-  }, [leaves])
-
-  function renderCalendar() {
-    const days = Array.from({ length: 31 }, (_, i) => i + 1)
-
-    return (
-      <div style={styles.calendarGrid}>
-        {days.map((day) => {
-          const dayLeaves = approvedLeaves.filter((leave) => {
-            const start = new Date(leave.start_date).getDate()
-            const end = new Date(leave.end_date).getDate()
-
-            return day >= start && day <= end
-          })
-
-          return (
-            <div key={day} style={styles.dayCell}>
-              <div style={styles.dayNumber}>{day}</div>
-
-              {dayLeaves.map((leave) => (
-                <div
-                  key={leave.id}
-                  style={{
-                    ...styles.leaveBadge,
-                    background:
-                      leave.reason === 'Нејавено отсуство'
-                        ? '#7e22ce'
-                        : leave.reason === 'Боледување'
-                        ? '#1d4ed8'
-                        : '#8b1e1e',
-                  }}
-                >
-                  {leave.employee_name} - {leave.reason}
-                </div>
-              ))}
-            </div>
-          )
-        })}
-      </div>
-    )
+  function getEmployeeById(id) {
+    return employees.find((e) => e.id === id)
   }
+
+  function getEventColor(leave, index) {
+    if (leave.reason === 'Боледување') return '#1d4ed8'
+    if (leave.reason === 'Нејавено отсуство') return '#7e22ce'
+
+    const colors = ['#7a2b26', '#188038', '#b45309', '#0f766e', '#be123c']
+    const empIndex = employees.findIndex((e) => e.id === leave.employee_id)
+
+    return colors[(empIndex >= 0 ? empIndex : index) % colors.length]
+  }
+
+  const myLeaves = useMemo(() => {
+    if (!myEmployee?.id) return []
+    return leaves.filter((l) => l.employee_id === myEmployee.id)
+  }, [leaves, myEmployee])
+
+  const pendingLeaves = leaves.filter((l) => l.status === 'pending')
+
+  const monthName = currentDate.toLocaleDateString('mk-MK', {
+    month: 'long',
+    year: 'numeric',
+  })
+
+  const todayString = formatDate(new Date())
+
+  if (loading) return <div style={styles.center}>Loading...</div>
 
   if (!session) {
     return (
-      <div style={styles.loginWrap}>
-        <form style={styles.loginBox} onSubmit={login}>
-          <h1 style={styles.logo}>SAGA апликација за одмори</h1>
+      <div style={styles.center}>
+        <div style={styles.loginCard}>
+          <h1 style={styles.logo}>{APP_NAME}</h1>
 
           <input
             style={styles.input}
             placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            value={loginEmail}
+            onChange={(e) => setLoginEmail(e.target.value)}
           />
 
           <input
@@ -272,159 +348,234 @@ export default function App() {
             placeholder="Лозинка"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') login()
+            }}
           />
 
-          <button style={styles.button}>Најави се</button>
-        </form>
+          <button style={styles.button} onClick={login}>
+            Најави се
+          </button>
+        </div>
       </div>
     )
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.header}>
-        <h1 style={styles.logo}>SAGA апликација за одмори</h1>
+    <div style={styles.app}>
+      <div style={styles.navbar}>
+        <h2 style={styles.logo}>{APP_NAME}</h2>
 
-        <div style={styles.userBox}>
-          <div>{profile?.full_name}</div>
-          <small>{role === 'hr' ? 'HR' : 'Вработен'}</small>
-        </div>
-
-        <button style={styles.logout} onClick={logout}>
-          Одјави се
-        </button>
-      </div>
-
-      <div style={styles.passwordMiniBox}>
-        <input
-          style={styles.smallInput}
-          type="password"
-          placeholder="Нова лозинка"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-        />
-
-        <button style={styles.smallButton} onClick={updatePassword}>
-          Промени
-        </button>
-      </div>
-
-      <div style={styles.card}>
-        <h2>Календар</h2>
-        {renderCalendar()}
-      </div>
-
-      {role !== 'hr' && (
-        <div style={styles.card}>
-          <h3>Мој одмор</h3>
-
-          <div style={styles.statsRow}>
-            <div style={styles.statBox}>
-              <span>Вкупно</span>
-              <b>{myEmployee?.leave_days_total || 0}</b>
-            </div>
-
-            <div style={styles.statBox}>
-              <span>Искористено</span>
-              <b>{myEmployee?.leave_days_used || 0}</b>
-            </div>
-
-            <div style={styles.statBox}>
-              <span>Останато</span>
-              <b>
-                {(myEmployee?.leave_days_total || 0) -
-                  (myEmployee?.leave_days_used || 0)}
-              </b>
-            </div>
+        <div style={styles.navRight}>
+          <div style={{ textAlign: 'right' }}>
+            <b>{fullName}</b>
+            <div style={styles.roleBadge}>{role === 'hr' ? 'HR' : 'Вработен'}</div>
           </div>
-        </div>
-      )}
 
-      {role === 'hr' && (
-        <>
-          <div style={styles.card}>
-            <h3>Додај вработен</h3>
-
+          <div style={styles.passwordMini}>
             <input
-              style={styles.input}
-              placeholder="Име и презиме"
-              value={newEmployeeName}
-              onChange={(e) => setNewEmployeeName(e.target.value)}
+              style={styles.passwordInput}
+              type="password"
+              placeholder="Нова лозинка"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
             />
-
-            <input
-              style={styles.input}
-              placeholder="Email"
-              value={newEmployeeEmail}
-              onChange={(e) => setNewEmployeeEmail(e.target.value)}
-            />
-
-            <select
-              style={styles.input}
-              value={newEmployeeRole}
-              onChange={(e) => setNewEmployeeRole(e.target.value)}
-            >
-              <option value="employee">Вработен</option>
-              <option value="hr">HR</option>
-            </select>
-
-            <input
-              style={styles.input}
-              type="number"
-              placeholder="Денови одмор"
-              value={newEmployeeDays}
-              onChange={(e) => setNewEmployeeDays(e.target.value)}
-            />
-
-            <button style={styles.button} onClick={addEmployee}>
-              Додади
+            <button style={styles.passwordButton} onClick={changePassword}>
+              Промени
             </button>
           </div>
 
-          <div style={styles.card}>
-            <h3>Вработени</h3>
+          <button style={styles.logout} onClick={logout}>
+            Одјави се
+          </button>
+        </div>
+      </div>
 
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th>Име</th>
-                  <th>Email</th>
-                  <th>Вкупно</th>
-                  <th>Искористено</th>
-                  <th>Останато</th>
-                  <th>Акција</th>
-                </tr>
-              </thead>
+      <div style={styles.container}>
+        <div style={styles.calendarCard}>
+          <div style={styles.calendarTop}>
+            <div style={styles.calendarTitleWrap}>
+              <h3 style={styles.calendarTitle}>Календар</h3>
+              <span style={styles.monthName}>{monthName}</span>
+            </div>
 
-              <tbody>
-                {employees.map((emp) => (
-                  <tr key={emp.id}>
-                    <td>{emp.full_name}</td>
-                    <td>{emp.email}</td>
-                    <td>{emp.leave_days_total}</td>
-                    <td>{emp.leave_days_used}</td>
-                    <td>
-                      {Number(emp.leave_days_total) -
-                        Number(emp.leave_days_used)}
-                    </td>
-
-                    <td>
-                      <button
-                        style={styles.deleteBtn}
-                        onClick={() => deleteEmployee(emp.id)}
-                      >
-                        Избриши
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div>
+              <button style={styles.smallButton} onClick={() => setCurrentDate(new Date())}>
+                Денес
+              </button>
+              <button
+                style={styles.smallButton}
+                onClick={() =>
+                  setCurrentDate(
+                    new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1)
+                  )
+                }
+              >
+                ‹
+              </button>
+              <button
+                style={styles.smallButton}
+                onClick={() =>
+                  setCurrentDate(
+                    new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1)
+                  )
+                }
+              >
+                ›
+              </button>
+            </div>
           </div>
-        </>
-      )}
 
-      {role !== 'hr' && (
+          <div style={styles.weekHeader}>
+            <div>Пон</div>
+            <div>Вто</div>
+            <div>Сре</div>
+            <div>Чет</div>
+            <div>Пет</div>
+            <div>Саб</div>
+            <div>Нед</div>
+          </div>
+
+          <div style={styles.calendarGrid}>
+            {getCalendarDays().map((day, index) => {
+              const dayLeaves = getLeavesForDay(day)
+              const isToday = day && formatDate(day) === todayString
+
+              return (
+                <div key={index} style={styles.day}>
+                  {day && (
+                    <>
+                      <div style={{ ...styles.dayNumber, ...(isToday ? styles.today : {}) }}>
+                        {day.getDate()}
+                      </div>
+
+                      {dayLeaves.map((leave, i) => {
+                        const emp = getEmployeeById(leave.employee_id)
+
+                        return (
+                          <div
+                            key={leave.id}
+                            style={{
+                              ...styles.event,
+                              background: getEventColor(leave, i),
+                            }}
+                            title={`${emp?.full_name || 'Вработен'} - ${leave.reason || 'Одмор'}`}
+                          >
+                            {emp?.full_name || 'Вработен'} - {leave.reason || 'Одмор'}
+                          </div>
+                        )
+                      })}
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          <div style={styles.legend}>
+            <span><b style={{ ...styles.legendDot, background: '#7a2b26' }} /> Одмор</span>
+            <span><b style={{ ...styles.legendDot, background: '#1d4ed8' }} /> Боледување</span>
+            <span><b style={{ ...styles.legendDot, background: '#7e22ce' }} /> Нејавено отсуство</span>
+          </div>
+        </div>
+
+        {role !== 'hr' && myEmployee && (
+          <div style={styles.card}>
+            <h3>Мој одмор</h3>
+
+            <div style={styles.employeeInfoBox}>
+              <h3 style={{ margin: '0 0 6px 0' }}>{myEmployee.full_name}</h3>
+
+              <div style={styles.muted}>{myEmployee.email}</div>
+
+              <div style={styles.employeeDaysLine}>
+                Вкупно: <b>{Number(myEmployee.leave_days_total || 0)}</b> | Искористено:{' '}
+                <b>{Number(myEmployee.leave_days_used || 0)}</b> | Останато:{' '}
+                <b>
+                  {Number(myEmployee.leave_days_total || 0) -
+                    Number(myEmployee.leave_days_used || 0)}
+                </b>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {role === 'hr' && (
+          <div style={styles.card}>
+            <h3>HR уредување на вработени</h3>
+
+            {employees.map((emp) => {
+              const total = Number(emp.leave_days_total || 0)
+              const used = Number(emp.leave_days_used || 0)
+              const remaining = total - used
+              const isEditing = editingEmployeeId === emp.id
+
+              return (
+                <div key={emp.id} style={styles.employeeBox}>
+                  {!isEditing ? (
+                    <>
+                      <div>
+                        <b>{emp.full_name}</b>
+                        <div style={styles.muted}>{emp.email}</div>
+                        <div>
+                          Вкупно: <b>{total}</b> | Искористено: <b>{used}</b> | Останато:{' '}
+                          <b>{remaining}</b>
+                        </div>
+                      </div>
+
+                      <button style={styles.smallButton} onClick={() => startEditEmployee(emp)}>
+                        Едитирај
+                      </button>
+                    </>
+                  ) : (
+                    <div style={{ width: '100%' }}>
+                      <input
+                        style={styles.input}
+                        placeholder="Име и презиме"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                      />
+
+                      <input
+                        style={styles.input}
+                        placeholder="Email"
+                        value={editEmail}
+                        onChange={(e) => setEditEmail(e.target.value)}
+                      />
+
+                      <input
+                        style={styles.input}
+                        type="number"
+                        placeholder="Вкупно денови одмор"
+                        value={editTotalDays}
+                        onChange={(e) => setEditTotalDays(e.target.value)}
+                      />
+
+                      <input
+                        style={styles.input}
+                        type="number"
+                        placeholder="Искористени денови"
+                        value={editUsedDays}
+                        onChange={(e) => setEditUsedDays(e.target.value)}
+                      />
+
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <button style={styles.approve} onClick={saveEmployeeEdit}>
+                          Зачувај
+                        </button>
+
+                        <button style={styles.reject} onClick={cancelEditEmployee}>
+                          Откажи
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
         <div style={styles.card}>
           <h3>Поднеси барање</h3>
 
@@ -447,259 +598,350 @@ export default function App() {
             value={reason}
             onChange={(e) => setReason(e.target.value)}
           >
-            <option>Одмор</option>
-            <option>Боледување</option>
+            <option value="Одмор">Одмор</option>
+            <option value="Боледување">Боледување</option>
           </select>
 
-          <button style={styles.button} onClick={submitLeave}>
+          <button style={styles.button} onClick={submitLeaveRequest}>
             Испрати барање
           </button>
         </div>
-      )}
 
-      {role === 'hr' && (
         <div style={styles.card}>
-          <h3>Барања</h3>
+          <h3>Мои барања</h3>
 
-          {leaves
-            .filter((l) => l.status === 'pending')
-            .map((leave) => (
-              <div key={leave.id} style={styles.leaveCard}>
-                <div>
-                  <b>{leave.employee_name}</b>
+          {myLeaves.length === 0 && <p>Нема барања.</p>}
 
+          {myLeaves.map((leave) => (
+            <div key={leave.id} style={styles.leave}>
+              <div>
+                <b>
+                  {formatDisplayDate(leave.start_date)} → {formatDisplayDate(leave.end_date)}
+                </b>
+                <div>{leave.reason}</div>
+              </div>
+
+              <div>{translateStatus(leave.status)}</div>
+            </div>
+          ))}
+        </div>
+
+        {role === 'hr' && (
+          <div style={styles.card}>
+            <h3>HR барања за одобрување</h3>
+
+            {pendingLeaves.length === 0 && <p>Нема нови барања.</p>}
+
+            {pendingLeaves.map((leave) => {
+              const emp = employees.find((e) => e.id === leave.employee_id)
+
+              return (
+                <div key={leave.id} style={styles.leave}>
                   <div>
-                    {leave.start_date} до {leave.end_date}
+                    <b>{emp?.full_name}</b>
+                    <div>
+                      {formatDisplayDate(leave.start_date)} → {formatDisplayDate(leave.end_date)}
+                    </div>
+                    <div>{leave.reason}</div>
                   </div>
 
-                  <small>{leave.reason}</small>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                      style={styles.approve}
+                      onClick={() => updateLeaveStatus(leave, 'approved')}
+                    >
+                      Одобри
+                    </button>
+
+                    <button
+                      style={styles.reject}
+                      onClick={() => updateLeaveStatus(leave, 'rejected')}
+                    >
+                      Одбиј
+                    </button>
+                  </div>
                 </div>
+              )
+            })}
+          </div>
+        )}
 
-                <div style={styles.actionRow}>
-                  <button
-                    style={styles.approve}
-                    onClick={() => updateLeaveStatus(leave, 'approved')}
-                  >
-                    Одобри
-                  </button>
-
-                  <button
-                    style={styles.reject}
-                    onClick={() => updateLeaveStatus(leave, 'rejected')}
-                  >
-                    Одбиј
-                  </button>
-                </div>
-              </div>
-            ))}
-        </div>
-      )}
-
-      <div style={styles.version}>{VERSION}</div>
+        <div style={styles.version}>{VERSION}</div>
+      </div>
     </div>
   )
 }
 
-const styles = {
-  page: {
-    background: '#f6f2f1',
-    minHeight: '100vh',
-    paddingBottom: 40,
-  },
+function translateStatus(status) {
+  if (status === 'approved') return 'Одобрено'
+  if (status === 'rejected') return 'Одбиено'
+  return 'Се чека'
+}
 
-  header: {
+const styles = {
+  center: {
+    minHeight: '100vh',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: '#f5f1ef',
+  },
+  app: {
+    minHeight: '100vh',
+    background: '#f5f1ef',
+    fontFamily: 'Arial',
+  },
+  navbar: {
+    minHeight: 70,
+    background: '#fff',
+    borderBottom: '1px solid #ddd',
+    padding: '0 20px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
-    borderBottom: '1px solid #ddd',
-    background: '#fff',
+    gap: 20,
   },
-
+  navRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 14,
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+  },
   logo: {
-    color: '#7f1d1d',
+    color: '#7a2b26',
     margin: 0,
     fontWeight: 800,
   },
-
-  loginWrap: {
-    minHeight: '100vh',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    background: '#f6f2f1',
-  },
-
-  loginBox: {
-    width: 350,
+  loginCard: {
+    width: 390,
     background: '#fff',
     padding: 30,
     borderRadius: 16,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-    boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+    border: '1px solid #eadbd8',
+    boxShadow: '0 8px 24px rgba(122,43,38,.14)',
   },
-
+  passwordMini: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    background: '#fff',
+    border: '1px solid #eadbd8',
+    borderRadius: 10,
+    padding: '8px 10px',
+  },
+  passwordInput: {
+    width: 210,
+    padding: '9px 10px',
+    border: '1px solid #ddd',
+    borderRadius: 8,
+    outline: 'none',
+  },
+  passwordButton: {
+    padding: '9px 13px',
+    borderRadius: 8,
+    border: 'none',
+    background: '#7a2b26',
+    color: '#fff',
+    cursor: 'pointer',
+    fontWeight: 700,
+  },
+  container: {
+    padding: 25,
+    maxWidth: 1500,
+    margin: '0 auto',
+  },
   card: {
     background: '#fff',
-    margin: 20,
+    borderRadius: 14,
     padding: 20,
-    borderRadius: 16,
-    boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+    marginBottom: 20,
+    border: '1px solid #ddd',
   },
-
+  calendarCard: {
+    background: '#fff',
+    borderRadius: 14,
+    marginBottom: 20,
+    border: '1px solid #ddd',
+    overflow: 'hidden',
+  },
   input: {
     width: '100%',
     padding: 12,
-    borderRadius: 10,
-    border: '1px solid #ddd',
     marginBottom: 12,
-  },
-
-  button: {
-    background: '#7f1d1d',
-    color: '#fff',
-    border: 'none',
-    padding: '12px 18px',
-    borderRadius: 10,
-    cursor: 'pointer',
-  },
-
-  logout: {
-    background: '#fff',
-    color: '#7f1d1d',
-    border: '1px solid #7f1d1d',
-    padding: '10px 16px',
-    borderRadius: 10,
-    cursor: 'pointer',
-  },
-
-  userBox: {
-    marginLeft: 'auto',
-    marginRight: 20,
-    textAlign: 'right',
-  },
-
-  passwordMiniBox: {
-    display: 'flex',
-    gap: 10,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    padding: '10px 20px 0',
-  },
-
-  smallInput: {
-    width: 220,
-    padding: 10,
-    borderRadius: 10,
-    border: '1px solid #ddd',
-  },
-
-  smallButton: {
-    background: '#7f1d1d',
-    color: '#fff',
-    border: 'none',
-    padding: '10px 14px',
-    borderRadius: 10,
-    cursor: 'pointer',
-  },
-
-  calendarGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
-    gap: 1,
-    background: '#ddd',
-  },
-
-  dayCell: {
-    minHeight: 120,
-    background: '#fff',
-    padding: 8,
-  },
-
-  dayNumber: {
-    fontWeight: 700,
-    marginBottom: 8,
-  },
-
-  leaveBadge: {
-    color: '#fff',
-    padding: '6px 8px',
     borderRadius: 8,
+    border: '1px solid #ccc',
+    boxSizing: 'border-box',
+  },
+  button: {
+    padding: '12px 20px',
+    background: '#7a2b26',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 8,
+    cursor: 'pointer',
+  },
+  logout: {
+    padding: '10px 14px',
+    background: '#fff',
+    color: '#7a2b26',
+    border: '1px solid #7a2b26',
+    borderRadius: 8,
+    cursor: 'pointer',
+    fontWeight: 700,
+  },
+  roleBadge: {
     fontSize: 12,
-    marginBottom: 4,
-    fontWeight: 600,
+    color: '#80645f',
+    marginTop: 4,
   },
-
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
+  muted: {
+    color: '#80645f',
+    fontSize: 13,
+    marginTop: 3,
   },
-
-  leaveCard: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    border: '1px solid #eee',
+  employeeInfoBox: {
+    border: '1px solid #eadbd8',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
+    background: '#fff',
   },
-
-  actionRow: {
+  employeeDaysLine: {
+    marginTop: 8,
+    fontSize: 16,
+  },
+  leave: {
     display: 'flex',
+    justifyContent: 'space-between',
+    padding: 12,
+    border: '1px solid #ddd',
+    borderRadius: 10,
+    marginBottom: 10,
     gap: 10,
   },
-
+  employeeBox: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: 12,
+    border: '1px solid #ddd',
+    borderRadius: 10,
+    marginBottom: 10,
+    gap: 14,
+  },
   approve: {
     background: 'green',
-    color: '#fff',
-    border: 'none',
-    padding: '10px 14px',
-    borderRadius: 10,
-    cursor: 'pointer',
-  },
-
-  reject: {
-    background: 'crimson',
-    color: '#fff',
-    border: 'none',
-    padding: '10px 14px',
-    borderRadius: 10,
-    cursor: 'pointer',
-  },
-
-  deleteBtn: {
-    background: '#7f1d1d',
     color: '#fff',
     border: 'none',
     padding: '8px 12px',
     borderRadius: 8,
     cursor: 'pointer',
   },
-
-  statsRow: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: 12,
+  reject: {
+    background: 'crimson',
+    color: '#fff',
+    border: 'none',
+    padding: '8px 12px',
+    borderRadius: 8,
+    cursor: 'pointer',
   },
-
-  statBox: {
-    background: '#f8f3f1',
-    border: '1px solid #eadbd8',
-    borderRadius: 12,
-    padding: 16,
+  calendarTop: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    padding: '18px 20px',
+    borderBottom: '1px solid #ddd',
   },
-
+  calendarTitleWrap: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 18,
+  },
+  calendarTitle: {
+    margin: 0,
+    fontSize: 24,
+  },
+  monthName: {
+    color: '#80645f',
+    textTransform: 'capitalize',
+    fontSize: 18,
+  },
+  smallButton: {
+    marginLeft: 8,
+    padding: '8px 12px',
+    borderRadius: 8,
+    border: '1px solid #7a2b26',
+    background: '#fff',
+    color: '#7a2b26',
+    cursor: 'pointer',
+    fontWeight: 700,
+  },
+  weekHeader: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, 1fr)',
+    textAlign: 'center',
+    fontWeight: 700,
+    color: '#80645f',
+    borderBottom: '1px solid #ddd',
+    padding: '10px 0',
+  },
+  calendarGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(7, 1fr)',
+  },
+  day: {
+    minHeight: 120,
+    padding: 8,
+    borderRight: '1px solid #ddd',
+    borderBottom: '1px solid #ddd',
+    background: '#fff',
+  },
+  dayNumber: {
+    width: 26,
+    height: 26,
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+    fontSize: 13,
+  },
+  today: {
+    background: '#7a2b26',
+    color: '#fff',
+    fontWeight: 700,
+  },
+  event: {
+    color: '#fff',
+    borderRadius: 6,
+    padding: '4px 6px',
+    fontSize: 11,
+    fontWeight: 700,
+    marginBottom: 4,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  legend: {
+    display: 'flex',
+    gap: 18,
+    justifyContent: 'center',
+    padding: 12,
+    fontSize: 14,
+  },
+  legendDot: {
+    display: 'inline-block',
+    width: 12,
+    height: 12,
+    borderRadius: 3,
+    marginRight: 6,
+    verticalAlign: 'middle',
+  },
   version: {
     position: 'fixed',
-    right: 10,
+    right: 15,
     bottom: 10,
-    color: '#777',
     fontSize: 12,
+    color: '#777',
   },
 }
