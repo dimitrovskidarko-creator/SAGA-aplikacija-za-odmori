@@ -401,10 +401,23 @@ export default function App() {
 
   const pendingLeaves = leaves.filter((l) => l.status === 'pending')
 
-  const monthName = currentDate.toLocaleDateString('mk-MK', {
+  const monthName = currentDate
+  .toLocaleDateString('mk-MK', {
     month: 'long',
     year: 'numeric',
   })
+  .replace('мај', 'Мај')
+  .replace('јуни', 'Јуни')
+  .replace('јули', 'Јули')
+  .replace('август', 'Август')
+  .replace('септември', 'Септември')
+  .replace('октомври', 'Октомври')
+  .replace('ноември', 'Ноември')
+  .replace('декември', 'Декември')
+  .replace('јануари', 'Јануари')
+  .replace('февруари', 'Февруари')
+  .replace('март', 'Март')
+  .replace('април', 'Април')
 
   const todayString = formatDate(new Date())
 
