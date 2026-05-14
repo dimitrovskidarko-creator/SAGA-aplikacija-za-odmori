@@ -666,7 +666,7 @@ export default function App() {
             }}
           >
             <button style={styles.themeButton} onClick={() => setDarkMode(!darkMode)}>
-              {darkMode ? 'Light' : 'Dark'}
+              {darkMode ? 'Светла позадина' : 'Темна позадина'}
             </button>
 
             <div style={{ ...styles.passwordMini, background: theme.card, borderColor: theme.border }}>
@@ -847,19 +847,38 @@ export default function App() {
           <Card theme={theme}>
             <h3>Нејавено отсуство</h3>
 
-            <select
-              style={styles.input}
-              value={absenceEmployeeId}
-              onChange={(e) => setAbsenceEmployeeId(e.target.value)}
-            >
-              <option value="">Избери вработен</option>
+          <select
+  style={{
+    ...styles.input,
+    color: '#fff',
+    background: '#0b2230'
+  }}
+  value={absenceEmployeeId}
+  onChange={(e) => setAbsenceEmployeeId(e.target.value)}
+>
+  <option
+    value=""
+    style={{
+      color: '#000',
+      background: '#fff'
+    }}
+  >
+    Избери вработен
+  </option>
 
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.full_name}
-                </option>
-              ))}
-            </select>
+  {employees.map((emp) => (
+    <option
+      key={emp.id}
+      value={emp.id}
+      style={{
+        color: '#000',
+        background: '#fff'
+      }}
+    >
+      {emp.full_name}
+    </option>
+  ))}
+</select>
 
             <input
               style={styles.input}
