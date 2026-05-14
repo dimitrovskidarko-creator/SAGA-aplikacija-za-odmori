@@ -3,10 +3,10 @@ import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
   'https://iynyzhiyddexvpxmodxi.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5bnl6aGl5ZGRleHZweG1vZHhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MTk3NjYsImV4cCI6MjA5Mjk5NTc2Nn0.V0_R1YPyCvKAqvE50J-oafL4lRXgnWOtsIPzwZcgyRU'
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJIUzI1NiIsInJlZiI6Iml5bnl6aGl5ZGRleHZweG1vZHhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MTk3NjYsImV4cCI6MjA5Mjk5NTc2Nn0.V0_R1YPyCvKAqvE50J-oafL4lRXgnWOtsIPzwZcgyRU'
 )
 
-const VERSION = 'v1.21'
+const VERSION = 'v1.22'
 const APP_NAME = 'SAGA апликација за одмори'
 const EMAIL_FUNCTION_URL =
   'https://iynyzhiyddexvpxmodxi.supabase.co/functions/v1/send-email-notification'
@@ -191,7 +191,6 @@ export default function App() {
     }
 
     const emp = employees.find((e) => e.id === absenceEmployeeId)
-
     if (!emp) return alert('Не е пронајден вработен')
 
     const { error } = await supabase.from('leave_requests').insert({
@@ -314,10 +313,23 @@ export default function App() {
   }
 
   function countDays(start, end) {
-    const s = new Date(start)
-    const e = new Date(end)
+    const startDate = new Date(start)
+    const endDate = new Date(end)
 
-    return Math.floor((e - s) / (1000 * 60 * 60 * 24)) + 1
+    let count = 0
+    const current = new Date(startDate)
+
+    while (current <= endDate) {
+      const day = current.getDay()
+
+      if (day !== 0 && day !== 6) {
+        count++
+      }
+
+      current.setDate(current.getDate() + 1)
+    }
+
+    return count
   }
 
   function formatDate(date) {
@@ -375,18 +387,18 @@ export default function App() {
     if (leave.reason === 'Нејавено отсуство') return '#7c3aed'
 
     const colors = [
-      '#7a2b26',
-      '#188038',
-      '#b45309',
-      '#0f766e',
-      '#be123c',
-      '#9333ea',
-      '#ea580c',
-      '#0284c7',
-      '#4f46e5',
-      '#15803d',
-      '#c026d3',
-      '#0d9488',
+      '#0f9b8e',
+      '#15b8a6',
+      '#28c7b7',
+      '#0ea5a3',
+      '#0891b2',
+      '#22c55e',
+      '#14b8a6',
+      '#06b6d4',
+      '#3b82f6',
+      '#8b5cf6',
+      '#f59e0b',
+      '#ef4444',
     ]
 
     const empIndex = employees.findIndex((e) => e.id === leave.employee_id)
@@ -401,25 +413,26 @@ export default function App() {
 
   const pendingLeaves = leaves.filter((l) => l.status === 'pending')
 
-const months = [
-  'Јануари',
-  'Февруари',
-  'Март',
-  'Април',
-  'Мај',
-  'Јуни',
-  'Јули',
-  'Август',
-  'Септември',
-  'Октомври',
-  'Ноември',
-  'Декември',
-]
+  const approvedCount = leaves.filter((l) => l.status === 'approved').length
+  const pendingCount = leaves.filter((l) => l.status === 'pending').length
+  const rejectedCount = leaves.filter((l) => l.status === 'rejected').length
 
-const monthName = `${
-  months[currentDate.getMonth()]
-} ${currentDate.getFullYear()}`
+  const months = [
+    'Јануари',
+    'Февруари',
+    'Март',
+    'Април',
+    'Мај',
+    'Јуни',
+    'Јули',
+    'Август',
+    'Септември',
+    'Октомври',
+    'Ноември',
+    'Декември',
+  ]
 
+  const monthName = `${months[currentDate.getMonth()]} ${currentDate.getFullYear()}`
   const todayString = formatDate(new Date())
 
   if (loading) return <div style={styles.center}>Loading...</div>
@@ -428,7 +441,8 @@ const monthName = `${
     return (
       <div style={styles.center}>
         <div style={styles.loginCard}>
-          <h1 style={styles.logo}>{APP_NAME}</h1>
+          <h1 style={styles.loginLogo}>SAGA</h1>
+          <p style={styles.loginSubtitle}>Апликација за одмори</p>
 
           <input
             style={styles.input}
@@ -457,37 +471,104 @@ const monthName = `${
   }
 
   return (
-    <div style={styles.app}>
-      <div style={styles.navbar}>
-        <h2 style={styles.logo}>{APP_NAME}</h2>
+    <div style={styles.shell}>
+      <aside style={styles.sidebar}>
+        <div style={styles.brand}>
+          <div style={styles.brandIcon}>S</div>
+          <div>
+            <div style={styles.brandTitle}>SAGA</div>
+            <div style={styles.brandSub}>HR APP</div>
+          </div>
+        </div>
 
-        <div style={styles.navRight}>
-          <div style={{ textAlign: 'right' }}>
+        <div style={styles.menu}>
+          <div style={{ ...styles.menuItem, ...styles.menuItemActive }}>▣ Преглед</div>
+          <div style={styles.menuItem}>▦ Календар</div>
+          <div style={styles.menuItem}>☑ Барања за одмор</div>
+          <div style={styles.menuItem}>◷ Отсуства</div>
+          {role === 'hr' && <div style={styles.menuItem}>◎ Вработени</div>}
+          {role === 'hr' && <div style={styles.menuItem}>▤ Извештаи</div>}
+        </div>
+
+        <div style={styles.sidebarUser}>
+          <div style={styles.avatar}>
+            {(fullName || 'U')
+              .split(' ')
+              .map((x) => x[0])
+              .join('')
+              .slice(0, 2)}
+          </div>
+          <div>
             <b>{fullName}</b>
-            <div style={styles.roleBadge}>{role === 'hr' ? 'HR' : 'Вработен'}</div>
+            <div style={styles.sidebarRole}>{role === 'hr' ? 'HR Администратор' : 'Вработен'}</div>
+          </div>
+        </div>
+      </aside>
+
+      <main style={styles.main}>
+        <div style={styles.topbar}>
+          <div>
+            <h1 style={styles.pageTitle}>Добредојде, {fullName}</h1>
+            <div style={styles.pageSubtitle}>{APP_NAME}</div>
           </div>
 
-          <div style={styles.passwordMini}>
-            <input
-              style={styles.passwordInput}
-              type="password"
-              placeholder="Нова лозинка"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-            />
+          <div style={styles.navRight}>
+            <div style={styles.passwordMini}>
+              <input
+                style={styles.passwordInput}
+                type="password"
+                placeholder="Нова лозинка"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
 
-            <button style={styles.passwordButton} onClick={changePassword}>
-              Промени
+              <button style={styles.passwordButton} onClick={changePassword}>
+                Промени
+              </button>
+            </div>
+
+            <button style={styles.logout} onClick={logout}>
+              Одјави се
             </button>
           </div>
-
-          <button style={styles.logout} onClick={logout}>
-            Одјави се
-          </button>
         </div>
-      </div>
 
-      <div style={styles.container}>
+        {role === 'hr' && (
+          <div style={styles.kpiGrid}>
+            <div style={styles.kpiCard}>
+              <div style={styles.kpiIcon}>📄</div>
+              <div>
+                <h2 style={styles.kpiNumber}>{leaves.length}</h2>
+                <div style={styles.kpiLabel}>Вкупно барања</div>
+              </div>
+            </div>
+
+            <div style={styles.kpiCard}>
+              <div style={styles.kpiIconGreen}>✓</div>
+              <div>
+                <h2 style={styles.kpiNumber}>{approvedCount}</h2>
+                <div style={styles.kpiLabel}>Одобрени</div>
+              </div>
+            </div>
+
+            <div style={styles.kpiCard}>
+              <div style={styles.kpiIconYellow}>⏱</div>
+              <div>
+                <h2 style={styles.kpiNumber}>{pendingCount}</h2>
+                <div style={styles.kpiLabel}>На чекање</div>
+              </div>
+            </div>
+
+            <div style={styles.kpiCard}>
+              <div style={styles.kpiIconRed}>×</div>
+              <div>
+                <h2 style={styles.kpiNumber}>{rejectedCount}</h2>
+                <div style={styles.kpiLabel}>Одбиени</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div style={styles.calendarCard}>
           <div style={styles.calendarTop}>
             <div style={styles.calendarTitleWrap}>
@@ -796,7 +877,7 @@ const monthName = `${
         )}
 
         <div style={styles.version}>{VERSION}</div>
-      </div>
+      </main>
     </div>
   )
 }
@@ -807,91 +888,241 @@ const styles = {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
-    background: '#f5f1ef',
+    background: '#f4fbfb',
   },
 
-  app: {
+  shell: {
     minHeight: '100vh',
-    background: '#f5f1ef',
+    display: 'flex',
+    background: '#f4fbfb',
     fontFamily: 'Arial',
+    color: '#111827',
   },
 
-  navbar: {
-    background: '#fff',
-    borderBottom: '1px solid #ddd',
-    padding: '16px 24px',
+  sidebar: {
+    width: 270,
+    minHeight: '100vh',
+    position: 'sticky',
+    top: 0,
+    background:
+      'linear-gradient(180deg, #061b2a 0%, #073344 45%, #0f766e 100%)',
+    color: '#fff',
+    padding: 22,
+    boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
+    boxShadow: '10px 0 30px rgba(15,118,110,.18)',
+  },
+
+  brand: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 35,
+  },
+
+  brandIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    background: 'linear-gradient(135deg, #5eead4, #0891b2)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 24,
+    fontWeight: 900,
+    boxShadow: '0 12px 24px rgba(94,234,212,.25)',
+  },
+
+  brandTitle: {
+    fontSize: 28,
+    fontWeight: 900,
+    letterSpacing: 1,
+  },
+
+  brandSub: {
+    fontSize: 13,
+    color: '#9ff5ea',
+    marginTop: 2,
+  },
+
+  menu: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+  },
+
+  menuItem: {
+    padding: '14px 15px',
+    borderRadius: 13,
+    color: '#d7fffa',
+    fontWeight: 700,
+    cursor: 'default',
+  },
+
+  menuItemActive: {
+    background: 'linear-gradient(135deg, #14b8a6, #0891b2)',
+    color: '#fff',
+    boxShadow: '0 12px 26px rgba(20,184,166,.28)',
+  },
+
+  sidebarUser: {
+    marginTop: 'auto',
+    padding: 14,
+    borderRadius: 16,
+    background: 'rgba(255,255,255,.11)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    border: '1px solid rgba(255,255,255,.12)',
+  },
+
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    background: 'linear-gradient(135deg, #14b8a6, #5eead4)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: 900,
+  },
+
+  sidebarRole: {
+    fontSize: 12,
+    color: '#b9fff6',
+    marginTop: 3,
+  },
+
+  main: {
+    flex: 1,
+    padding: 26,
+    maxWidth: 1550,
+    margin: '0 auto',
+    boxSizing: 'border-box',
+  },
+
+  topbar: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 20,
+    marginBottom: 22,
+  },
+
+  pageTitle: {
+    margin: 0,
+    fontSize: 32,
+    fontWeight: 900,
+  },
+
+  pageSubtitle: {
+    marginTop: 6,
+    color: '#667085',
   },
 
   navRight: {
     display: 'flex',
     alignItems: 'center',
-    gap: 15,
+    gap: 12,
     flexWrap: 'wrap',
     justifyContent: 'flex-end',
   },
 
-  logo: {
-    color: '#7a2b26',
-    margin: 0,
+  kpiGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, 1fr)',
+    gap: 16,
+    marginBottom: 20,
   },
 
-  roleBadge: {
-    fontSize: 12,
-    color: '#777',
-  },
-
-  passwordMini: {
+  kpiCard: {
+    background: '#fff',
+    borderRadius: 18,
+    padding: 20,
+    border: '1px solid #d8eeee',
     display: 'flex',
     alignItems: 'center',
-    gap: 8,
-    background: '#fff',
-    border: '1px solid #eadbd8',
-    borderRadius: 10,
-    padding: '8px 10px',
+    gap: 16,
+    boxShadow: '0 10px 30px rgba(15,118,110,.08)',
   },
 
-  passwordInput: {
-    width: 210,
-    padding: '9px 10px',
-    border: '1px solid #ddd',
-    borderRadius: 8,
-    outline: 'none',
+  kpiIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 16,
+    background: '#e6fffb',
+    color: '#0f766e',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 24,
   },
 
-  passwordButton: {
-    padding: '9px 13px',
-    borderRadius: 8,
-    border: 'none',
-    background: '#7a2b26',
-    color: '#fff',
-    cursor: 'pointer',
-    fontWeight: 700,
+  kpiIconGreen: {
+    width: 54,
+    height: 54,
+    borderRadius: 16,
+    background: '#dcfce7',
+    color: '#16a34a',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 28,
+    fontWeight: 900,
   },
 
-  container: {
-    maxWidth: 1450,
-    margin: '0 auto',
-    padding: 20,
+  kpiIconYellow: {
+    width: 54,
+    height: 54,
+    borderRadius: 16,
+    background: '#fef3c7',
+    color: '#d97706',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 24,
+  },
+
+  kpiIconRed: {
+    width: 54,
+    height: 54,
+    borderRadius: 16,
+    background: '#fee2e2',
+    color: '#dc2626',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 30,
+    fontWeight: 900,
+  },
+
+  kpiNumber: {
+    margin: 0,
+    fontSize: 30,
+  },
+
+  kpiLabel: {
+    color: '#667085',
+    marginTop: 4,
   },
 
   card: {
     background: '#fff',
     padding: 20,
-    borderRadius: 14,
-    border: '1px solid #ddd',
+    borderRadius: 18,
+    border: '1px solid #d8eeee',
     marginBottom: 20,
+    boxShadow: '0 10px 30px rgba(15,118,110,.06)',
   },
 
   calendarCard: {
     background: '#fff',
-    borderRadius: 14,
+    borderRadius: 18,
     overflow: 'hidden',
-    border: '1px solid #ddd',
+    border: '1px solid #d8eeee',
     marginBottom: 20,
+    boxShadow: '0 10px 30px rgba(15,118,110,.06)',
   },
 
   calendarTop: {
@@ -899,7 +1130,7 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderBottom: '1px solid #ddd',
+    borderBottom: '1px solid #e5f5f5',
   },
 
   calendarTitleWrap: {
@@ -914,8 +1145,8 @@ const styles = {
   },
 
   monthName: {
-    color: '#80645f',
-    textTransform: 'capitalize',
+    color: '#0f766e',
+    fontWeight: 800,
     fontSize: 18,
   },
 
@@ -925,7 +1156,8 @@ const styles = {
     textAlign: 'center',
     fontWeight: 'bold',
     padding: '10px 0',
-    borderBottom: '1px solid #ddd',
+    borderBottom: '1px solid #e5f5f5',
+    color: '#667085',
   },
 
   calendarGrid: {
@@ -935,9 +1167,10 @@ const styles = {
 
   day: {
     minHeight: 120,
-    borderRight: '1px solid #eee',
-    borderBottom: '1px solid #eee',
+    borderRight: '1px solid #edf5f5',
+    borderBottom: '1px solid #edf5f5',
     padding: 8,
+    background: '#fff',
   },
 
   dayNumber: {
@@ -951,7 +1184,7 @@ const styles = {
   },
 
   today: {
-    background: '#7a2b26',
+    background: '#0f766e',
     color: '#fff',
     fontWeight: 700,
   },
@@ -959,7 +1192,7 @@ const styles = {
   event: {
     color: '#fff',
     padding: '4px 6px',
-    borderRadius: 6,
+    borderRadius: 8,
     marginBottom: 4,
     fontSize: 11,
     fontWeight: 700,
@@ -979,26 +1212,56 @@ const styles = {
     width: '100%',
     padding: 12,
     marginBottom: 12,
-    borderRadius: 8,
-    border: '1px solid #ccc',
+    borderRadius: 10,
+    border: '1px solid #cfe8e8',
     boxSizing: 'border-box',
+    outline: 'none',
   },
 
   button: {
-    background: '#7a2b26',
+    background: 'linear-gradient(135deg, #14b8a6, #0f766e)',
     color: '#fff',
     border: 'none',
     padding: '12px 20px',
-    borderRadius: 8,
+    borderRadius: 10,
     cursor: 'pointer',
+    fontWeight: 800,
   },
 
   logout: {
     background: '#fff',
-    border: '1px solid #7a2b26',
-    color: '#7a2b26',
+    border: '1px solid #0f766e',
+    color: '#0f766e',
     padding: '10px 16px',
+    borderRadius: 10,
+    cursor: 'pointer',
+    fontWeight: 700,
+  },
+
+  passwordMini: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    background: '#fff',
+    border: '1px solid #d8eeee',
+    borderRadius: 12,
+    padding: '8px 10px',
+  },
+
+  passwordInput: {
+    width: 210,
+    padding: '9px 10px',
+    border: '1px solid #cfe8e8',
     borderRadius: 8,
+    outline: 'none',
+  },
+
+  passwordButton: {
+    padding: '9px 13px',
+    borderRadius: 8,
+    border: 'none',
+    background: '#0f766e',
+    color: '#fff',
     cursor: 'pointer',
     fontWeight: 700,
   },
@@ -1006,38 +1269,40 @@ const styles = {
   leave: {
     display: 'flex',
     justifyContent: 'space-between',
-    border: '1px solid #ddd',
-    borderRadius: 10,
+    border: '1px solid #d8eeee',
+    borderRadius: 12,
     padding: 12,
     marginBottom: 10,
     gap: 10,
   },
 
   approve: {
-    background: 'green',
+    background: '#16a34a',
     color: '#fff',
     border: 'none',
     padding: '8px 12px',
-    borderRadius: 8,
+    borderRadius: 9,
     cursor: 'pointer',
+    fontWeight: 700,
   },
 
   reject: {
-    background: 'crimson',
+    background: '#dc2626',
     color: '#fff',
     border: 'none',
     padding: '8px 12px',
-    borderRadius: 8,
+    borderRadius: 9,
     cursor: 'pointer',
+    fontWeight: 700,
   },
 
   smallButton: {
     marginLeft: 8,
     padding: '8px 12px',
-    borderRadius: 8,
-    border: '1px solid #7a2b26',
+    borderRadius: 9,
+    border: '1px solid #0f766e',
     background: '#fff',
-    color: '#7a2b26',
+    color: '#0f766e',
     cursor: 'pointer',
     fontWeight: 'bold',
   },
@@ -1046,15 +1311,15 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    border: '1px solid #ddd',
-    borderRadius: 10,
+    border: '1px solid #d8eeee',
+    borderRadius: 12,
     padding: 12,
     marginBottom: 10,
     gap: 10,
   },
 
   muted: {
-    color: '#666',
+    color: '#667085',
     fontSize: 13,
     marginTop: 4,
   },
@@ -1063,8 +1328,22 @@ const styles = {
     width: 380,
     background: '#fff',
     padding: 30,
-    borderRadius: 14,
-    border: '1px solid #ddd',
+    borderRadius: 18,
+    border: '1px solid #d8eeee',
+    boxShadow: '0 20px 50px rgba(15,118,110,.13)',
+  },
+
+  loginLogo: {
+    margin: 0,
+    color: '#0f766e',
+    fontSize: 42,
+    fontWeight: 900,
+  },
+
+  loginSubtitle: {
+    color: '#667085',
+    marginTop: 4,
+    marginBottom: 22,
   },
 
   version: {
