@@ -8,7 +8,7 @@ const supabase = createClient(
   '  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5bnl6aGl5ZGRleHZweG1vZHhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MTk3NjYsImV4cCI6MjA5Mjk5NTc2Nn0.V0_R1YPyCvKAqvE50J-oafL4lRXgnWOtsIPzwZcgyRU'
 )
 
-const VERSION = 'v1.25'
+const VERSION = 'v1.26'
 const APP_NAME = 'SAGA апликација за одмори'
 const EMAIL_FUNCTION_URL =
   'https://iynyzhiyddexvpxmodxi.supabase.co/functions/v1/send-email-notification'
@@ -46,6 +46,8 @@ export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activePage, setActivePage] = useState('overview')
+  const [darkMode, setDarkMode] = useState(false)
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth)
 
   const [role, setRole] = useState('')
   const [fullName, setFullName] = useState('')
@@ -73,6 +75,23 @@ export default function App() {
   const [editEmail, setEditEmail] = useState('')
   const [editTotalDays, setEditTotalDays] = useState(20)
   const [editUsedDays, setEditUsedDays] = useState(0)
+
+  const isMobile = windowWidth < 800
+
+  const theme = {
+    bg: darkMode ? '#071923' : '#f4fbfb',
+    card: darkMode ? '#0f2530' : '#fff',
+    text: darkMode ? '#e8fbfb' : '#111827',
+    muted: darkMode ? '#9cc8c8' : '#667085',
+    border: darkMode ? '#1e4450' : '#d8eeee',
+    line: darkMode ? '#1e4450' : '#edf5f5',
+  }
+
+  useEffect(() => {
+    const onResize = () => setWindowWidth(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -177,11 +196,9 @@ export default function App() {
     })
 
     alert('Барањето е испратено ✅')
-
     setStartDate('')
     setEndDate('')
     setReason('Одмор')
-
     await loadLeaves()
   }
 
@@ -189,9 +206,7 @@ export default function App() {
     if (role !== 'hr') return alert('Само HR може да внесува нејавено отсуство')
     if (!absenceEmployeeId) return alert('Избери вработен')
     if (!absenceStartDate || !absenceEndDate) return alert('Избери датуми')
-    if (absenceEndDate < absenceStartDate) {
-      return alert('Крајниот датум не може да биде пред почетниот')
-    }
+    if (absenceEndDate < absenceStartDate) return alert('Крајниот датум не може да биде пред почетниот')
 
     const emp = employees.find((e) => e.id === absenceEmployeeId)
     if (!emp) return alert('Не е пронајден вработен')
@@ -229,11 +244,9 @@ export default function App() {
     })
 
     alert('Нејавеното отсуство е внесено ✅')
-
     setAbsenceEmployeeId('')
     setAbsenceStartDate('')
     setAbsenceEndDate('')
-
     await loadEmployees(session.user.email)
     await loadLeaves()
   }
@@ -310,7 +323,6 @@ export default function App() {
     if (error) return alert(error.message)
 
     alert('Вработениот е изменет ✅')
-
     cancelEditEmployee()
     await loadEmployees(session.user.email)
   }
@@ -361,11 +373,7 @@ export default function App() {
 
     while (current <= endDate) {
       const day = current.getDay()
-
-      if (day !== 0 && day !== 6) {
-        count++
-      }
-
+      if (day !== 0 && day !== 6) count++
       current.setDate(current.getDate() + 1)
     }
 
@@ -376,7 +384,6 @@ export default function App() {
     const y = date.getFullYear()
     const m = String(date.getMonth() + 1).padStart(2, '0')
     const d = String(date.getDate()).padStart(2, '0')
-
     return `${y}-${m}-${d}`
   }
 
@@ -410,7 +417,6 @@ export default function App() {
 
   function getLeavesForDay(day) {
     if (!day) return []
-
     const d = formatDate(day)
 
     return leaves.filter(
@@ -446,7 +452,6 @@ export default function App() {
     ]
 
     const empIndex = employees.findIndex((e) => e.id === leave.employee_id)
-
     return colors[(empIndex >= 0 ? empIndex : index) % colors.length]
   }
 
@@ -463,6 +468,27 @@ export default function App() {
   const vacationCount = leaves.filter((l) => l.reason === 'Одмор').length
   const sickCount = leaves.filter((l) => l.reason === 'Боледување').length
   const unexcusedCount = leaves.filter((l) => l.reason === 'Нејавено отсуство').length
+
+  const totalRequests = leaves.length || 1
+  const approvedPercent = Math.round((approvedCount / totalRequests) * 100)
+  const pendingPercent = Math.round((pendingCount / totalRequests) * 100)
+  const rejectedPercent = Math.round((rejectedCount / totalRequests) * 100)
+
+  const totalUsedDays = employees.reduce(
+    (sum, emp) => sum + Number(emp.leave_days_used || 0),
+    0
+  )
+
+  const totalRemainingDays = employees.reduce(
+    (sum, emp) =>
+      sum +
+      (Number(emp.leave_days_total || 0) - Number(emp.leave_days_used || 0)),
+    0
+  )
+
+  const topEmployee = [...employees].sort(
+    (a, b) => Number(b.leave_days_used || 0) - Number(a.leave_days_used || 0)
+  )[0]
 
   const months = [
     'Јануари',
@@ -486,10 +512,10 @@ export default function App() {
 
   if (!session) {
     return (
-      <div style={styles.center}>
-        <div style={styles.loginCard}>
+      <div style={{ ...styles.center, background: theme.bg }}>
+        <div style={{ ...styles.loginCard, background: theme.card, borderColor: theme.border }}>
           <h1 style={styles.loginLogo}>SAGA</h1>
-          <p style={styles.loginSubtitle}>Апликација за одмори</p>
+          <p style={{ ...styles.loginSubtitle, color: theme.muted }}>Апликација за одмори</p>
 
           <input
             style={styles.input}
@@ -525,8 +551,22 @@ export default function App() {
   const showReports = role === 'hr' && activePage === 'reports'
 
   return (
-    <div style={styles.shell}>
-      <aside style={styles.sidebar}>
+    <div
+      style={{
+        ...styles.shell,
+        background: theme.bg,
+        color: theme.text,
+        flexDirection: isMobile ? 'column' : 'row',
+      }}
+    >
+      <aside
+        style={{
+          ...styles.sidebar,
+          width: isMobile ? '100%' : 270,
+          minHeight: isMobile ? 'auto' : '100vh',
+          position: isMobile ? 'relative' : 'sticky',
+        }}
+      >
         <div style={styles.brand}>
           <div style={styles.brandIcon}>S</div>
           <div>
@@ -535,91 +575,76 @@ export default function App() {
           </div>
         </div>
 
-        <div style={styles.menu}>
-          <div
-            style={{
-              ...styles.menuItem,
-              ...(activePage === 'overview' ? styles.menuItemActive : {}),
-            }}
-            onClick={() => setActivePage('overview')}
-          >
+        <div
+          style={{
+            ...styles.menu,
+            flexDirection: isMobile ? 'row' : 'column',
+            flexWrap: isMobile ? 'wrap' : 'nowrap',
+          }}
+        >
+          <MenuItem active={activePage === 'overview'} onClick={() => setActivePage('overview')}>
             ▣ Преглед
-          </div>
+          </MenuItem>
 
-          <div
-            style={{
-              ...styles.menuItem,
-              ...(activePage === 'calendar' ? styles.menuItemActive : {}),
-            }}
-            onClick={() => setActivePage('calendar')}
-          >
+          <MenuItem active={activePage === 'calendar'} onClick={() => setActivePage('calendar')}>
             ▦ Календар
-          </div>
+          </MenuItem>
 
-          <div
-            style={{
-              ...styles.menuItem,
-              ...(activePage === 'requests' ? styles.menuItemActive : {}),
-            }}
-            onClick={() => setActivePage('requests')}
-          >
+          <MenuItem active={activePage === 'requests'} onClick={() => setActivePage('requests')}>
             ☑ Барања за одмор
-          </div>
+          </MenuItem>
 
           {role === 'hr' && (
-            <div
-              style={{
-                ...styles.menuItem,
-                ...(activePage === 'absences' ? styles.menuItemActive : {}),
-              }}
-              onClick={() => setActivePage('absences')}
-            >
+            <MenuItem active={activePage === 'absences'} onClick={() => setActivePage('absences')}>
               ◷ Нејавено отсуство
-            </div>
+            </MenuItem>
           )}
 
           {role === 'hr' && (
-            <div
-              style={{
-                ...styles.menuItem,
-                ...(activePage === 'employees' ? styles.menuItemActive : {}),
-              }}
-              onClick={() => setActivePage('employees')}
-            >
+            <MenuItem active={activePage === 'employees'} onClick={() => setActivePage('employees')}>
               ◎ Вработени
-            </div>
+            </MenuItem>
           )}
 
           {role === 'hr' && (
-            <div
-              style={{
-                ...styles.menuItem,
-                ...(activePage === 'reports' ? styles.menuItemActive : {}),
-              }}
-              onClick={() => setActivePage('reports')}
-            >
+            <MenuItem active={activePage === 'reports'} onClick={() => setActivePage('reports')}>
               ▤ Извештаи
-            </div>
+            </MenuItem>
           )}
         </div>
 
-        <div style={styles.sidebarUser}>
-          <div style={styles.avatar}>
-            {(fullName || 'U')
-              .split(' ')
-              .map((x) => x[0])
-              .join('')
-              .slice(0, 2)}
+        {!isMobile && (
+          <div style={styles.sidebarUser}>
+            <div style={styles.avatar}>
+              {(fullName || 'U')
+                .split(' ')
+                .map((x) => x[0])
+                .join('')
+                .slice(0, 2)}
+            </div>
+            <div>
+              <b>{fullName}</b>
+              <div style={styles.sidebarRole}>
+                {role === 'hr' ? 'HR Администратор' : 'Вработен'}
+              </div>
+            </div>
           </div>
-          <div>
-            <b>{fullName}</b>
-            <div style={styles.sidebarRole}>{role === 'hr' ? 'HR Администратор' : 'Вработен'}</div>
-          </div>
-        </div>
+        )}
       </aside>
 
-      <main style={styles.main}>
-        <div style={styles.topbar}>
+      <main
+        style={{
+          ...styles.main,
+          padding: isMobile ? 14 : 26,
+        }}
+      >
+        <div
+          style={{
+            ...styles.topbar,
+            flexDirection: isMobile ? 'column' : 'row',
+            alignItems: isMobile ? 'stretch' : 'center',
+          }}
+        >
           <div>
             <h1 style={styles.pageTitle}>
               {activePage === 'overview' && 'Преглед'}
@@ -629,11 +654,22 @@ export default function App() {
               {activePage === 'employees' && 'Вработени'}
               {activePage === 'reports' && 'Извештаи'}
             </h1>
-            <div style={styles.pageSubtitle}>Добредојде, {fullName}</div>
+            <div style={{ ...styles.pageSubtitle, color: theme.muted }}>
+              Добредојде, {fullName}
+            </div>
           </div>
 
-          <div style={styles.navRight}>
-            <div style={styles.passwordMini}>
+          <div
+            style={{
+              ...styles.navRight,
+              justifyContent: isMobile ? 'flex-start' : 'flex-end',
+            }}
+          >
+            <button style={styles.themeButton} onClick={() => setDarkMode(!darkMode)}>
+              {darkMode ? 'Light' : 'Dark'}
+            </button>
+
+            <div style={{ ...styles.passwordMini, background: theme.card, borderColor: theme.border }}>
               <input
                 style={styles.passwordInput}
                 type="password"
@@ -654,17 +690,46 @@ export default function App() {
         </div>
 
         {role === 'hr' && showOverview && (
-          <div style={styles.kpiGrid}>
-            <Kpi icon="📄" value={leaves.length} label="Вкупно барања" styleIcon={styles.kpiIcon} />
-            <Kpi icon="✓" value={approvedCount} label="Одобрени" styleIcon={styles.kpiIconGreen} />
-            <Kpi icon="⏱" value={pendingCount} label="На чекање" styleIcon={styles.kpiIconYellow} />
-            <Kpi icon="×" value={rejectedCount} label="Одбиени" styleIcon={styles.kpiIconRed} />
-          </div>
+          <>
+            <div style={{ ...styles.kpiGrid, gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)' }}>
+              <Kpi icon="📄" value={leaves.length} label="Вкупно барања" styleIcon={styles.kpiIcon} theme={theme} />
+              <Kpi icon="✓" value={`${approvedPercent}%`} label={`Одобрени (${approvedCount})`} styleIcon={styles.kpiIconGreen} theme={theme} />
+              <Kpi icon="⏱" value={`${pendingPercent}%`} label={`На чекање (${pendingCount})`} styleIcon={styles.kpiIconYellow} theme={theme} />
+              <Kpi icon="×" value={`${rejectedPercent}%`} label={`Одбиени (${rejectedCount})`} styleIcon={styles.kpiIconRed} theme={theme} />
+            </div>
+
+            <div
+              style={{
+                ...styles.reportGrid,
+                gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+              }}
+            >
+              <div style={{ ...styles.reportBox, background: theme.card, borderColor: theme.border }}>
+                <h3>Искористен одмор</h3>
+                <h2>{totalUsedDays} дена</h2>
+                <p style={{ color: theme.muted }}>Вкупно искористени денови</p>
+              </div>
+
+              <div style={{ ...styles.reportBox, background: theme.card, borderColor: theme.border }}>
+                <h3>Останат одмор</h3>
+                <h2>{totalRemainingDays} дена</h2>
+                <p style={{ color: theme.muted }}>Вкупно останати денови</p>
+              </div>
+
+              <div style={{ ...styles.reportBox, background: theme.card, borderColor: theme.border }}>
+                <h3>Најмногу искористил</h3>
+                <h2>{topEmployee?.full_name || '-'}</h2>
+                <p style={{ color: theme.muted }}>
+                  {Number(topEmployee?.leave_days_used || 0)} дена
+                </p>
+              </div>
+            </div>
+          </>
         )}
 
         {showCalendar && (
-          <div style={styles.calendarCard}>
-            <div style={styles.calendarTop}>
+          <div style={{ ...styles.calendarCard, background: theme.card, borderColor: theme.border }}>
+            <div style={{ ...styles.calendarTop, borderColor: theme.line }}>
               <div style={styles.calendarTitleWrap}>
                 <h3 style={styles.calendarTitle}>Календар</h3>
                 <span style={styles.monthName}>{monthName}</span>
@@ -699,7 +764,7 @@ export default function App() {
               </div>
             </div>
 
-            <div style={styles.weekHeader}>
+            <div style={{ ...styles.weekHeader, borderColor: theme.line, color: theme.muted }}>
               <div>Пон</div>
               <div>Вто</div>
               <div>Сре</div>
@@ -715,7 +780,14 @@ export default function App() {
                 const isToday = day && formatDate(day) === todayString
 
                 return (
-                  <div key={index} style={styles.day}>
+                  <div
+                    key={index}
+                    style={{
+                      ...styles.day,
+                      background: theme.card,
+                      borderColor: theme.line,
+                    }}
+                  >
                     {day && (
                       <>
                         <div style={{ ...styles.dayNumber, ...(isToday ? styles.today : {}) }}>
@@ -748,7 +820,7 @@ export default function App() {
         )}
 
         {myEmployee && (showOverview || activePage === 'requests') && (
-          <div style={styles.card}>
+          <Card theme={theme}>
             <h3>Мој одмор</h3>
 
             <div style={styles.employeeInfo}>
@@ -768,11 +840,11 @@ export default function App() {
                 </b>
               </div>
             </div>
-          </div>
+          </Card>
         )}
 
         {role === 'hr' && showAbsences && (
-          <div style={styles.card}>
+          <Card theme={theme}>
             <h3>Нејавено отсуство</h3>
 
             <select
@@ -806,11 +878,11 @@ export default function App() {
             <button style={styles.reject} onClick={addUnexcusedAbsence}>
               Внеси отсуство
             </button>
-          </div>
+          </Card>
         )}
 
         {showEmployees && (
-          <div style={styles.card}>
+          <Card theme={theme}>
             <h3>HR уредување на вработени</h3>
 
             {employees.map((emp) => {
@@ -820,12 +892,12 @@ export default function App() {
               const isEditing = editingEmployeeId === emp.id
 
               return (
-                <div key={emp.id} style={styles.employeeBox}>
+                <div key={emp.id} style={{ ...styles.employeeBox, borderColor: theme.border }}>
                   {!isEditing ? (
                     <>
                       <div>
                         <b>{emp.full_name}</b>
-                        <div style={styles.muted}>{emp.email}</div>
+                        <div style={{ ...styles.muted, color: theme.muted }}>{emp.email}</div>
                         <div>
                           Вкупно: <b>{total}</b> | Искористено: <b>{used}</b> | Останато:{' '}
                           <b>{remaining}</b>
@@ -882,12 +954,12 @@ export default function App() {
                 </div>
               )
             })}
-          </div>
+          </Card>
         )}
 
         {showRequests && (
           <>
-            <div style={styles.card}>
+            <Card theme={theme}>
               <h3>Поднеси барање</h3>
 
               <input
@@ -916,15 +988,15 @@ export default function App() {
               <button style={styles.button} onClick={submitLeaveRequest}>
                 Испрати барање
               </button>
-            </div>
+            </Card>
 
-            <div style={styles.card}>
+            <Card theme={theme}>
               <h3>Мои барања</h3>
 
               {myLeaves.length === 0 && <p>Нема барања.</p>}
 
               {myLeaves.map((leave) => (
-                <div key={leave.id} style={styles.leave}>
+                <div key={leave.id} style={{ ...styles.leave, borderColor: theme.border }}>
                   <div>
                     <b>
                       {formatDisplayDate(leave.start_date)} - {formatDisplayDate(leave.end_date)}
@@ -935,10 +1007,10 @@ export default function App() {
                   <div>{translateStatus(leave.status)}</div>
                 </div>
               ))}
-            </div>
+            </Card>
 
             {role === 'hr' && (
-              <div style={styles.card}>
+              <Card theme={theme}>
                 <h3>HR Одобрување</h3>
 
                 {pendingLeaves.length === 0 && <p>Нема нови барања.</p>}
@@ -947,7 +1019,7 @@ export default function App() {
                   const emp = employees.find((e) => e.id === leave.employee_id)
 
                   return (
-                    <div key={leave.id} style={styles.leave}>
+                    <div key={leave.id} style={{ ...styles.leave, borderColor: theme.border }}>
                       <div>
                         <b>{emp?.full_name}</b>
                         <div>
@@ -975,17 +1047,26 @@ export default function App() {
                     </div>
                   )
                 })}
-              </div>
+              </Card>
             )}
           </>
         )}
 
         {showReports && (
-          <div ref={reportRef} style={styles.card}>
+          <div
+            ref={reportRef}
+            style={{
+              ...styles.card,
+              background: theme.card,
+              borderColor: theme.border,
+            }}
+          >
             <div style={styles.reportHeader}>
               <div>
                 <h3>Извештаи</h3>
-                <p style={styles.muted}>Преглед на барања, отсуства и искористени денови.</p>
+                <p style={{ ...styles.muted, color: theme.muted }}>
+                  Преглед на барања, отсуства и искористени денови.
+                </p>
               </div>
 
               <button style={styles.button} onClick={exportReportsPdf}>
@@ -993,41 +1074,37 @@ export default function App() {
               </button>
             </div>
 
-            <div style={styles.kpiGrid}>
-              <Kpi icon="📄" value={leaves.length} label="Вкупно барања" styleIcon={styles.kpiIcon} />
-              <Kpi icon="✓" value={approvedCount} label="Одобрени" styleIcon={styles.kpiIconGreen} />
-              <Kpi icon="⏱" value={pendingCount} label="На чекање" styleIcon={styles.kpiIconYellow} />
-              <Kpi icon="×" value={rejectedCount} label="Одбиени" styleIcon={styles.kpiIconRed} />
+            <div style={{ ...styles.kpiGrid, gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)' }}>
+              <Kpi icon="📄" value={leaves.length} label="Вкупно барања" styleIcon={styles.kpiIcon} theme={theme} />
+              <Kpi icon="✓" value={approvedCount} label="Одобрени" styleIcon={styles.kpiIconGreen} theme={theme} />
+              <Kpi icon="⏱" value={pendingCount} label="На чекање" styleIcon={styles.kpiIconYellow} theme={theme} />
+              <Kpi icon="×" value={rejectedCount} label="Одбиени" styleIcon={styles.kpiIconRed} theme={theme} />
             </div>
 
-            <div style={styles.reportGrid}>
-              <div style={styles.reportBox}>
+            <div
+              style={{
+                ...styles.reportGrid,
+                gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+              }}
+            >
+              <div style={{ ...styles.reportBox, background: theme.card, borderColor: theme.border }}>
                 <h3>Преглед по тип</h3>
 
-                <div style={styles.reportLine}>
-                  <span>Одмор</span>
-                  <b>{vacationCount}</b>
-                </div>
-
-                <div style={styles.reportLine}>
-                  <span>Боледување</span>
-                  <b>{sickCount}</b>
-                </div>
-
-                <div style={styles.reportLine}>
-                  <span>Нејавено отсуство</span>
-                  <b>{unexcusedCount}</b>
-                </div>
+                <ReportLine label="Одмор" value={vacationCount} theme={theme} />
+                <ReportLine label="Боледување" value={sickCount} theme={theme} />
+                <ReportLine label="Нејавено отсуство" value={unexcusedCount} theme={theme} />
               </div>
 
-              <div style={styles.reportBox}>
+              <div style={{ ...styles.reportBox, background: theme.card, borderColor: theme.border }}>
                 <h3>Искористени денови по вработен</h3>
 
                 {employees.map((emp) => (
-                  <div key={emp.id} style={styles.reportLine}>
-                    <span>{emp.full_name}</span>
-                    <b>{Number(emp.leave_days_used || 0)} дена</b>
-                  </div>
+                  <ReportLine
+                    key={emp.id}
+                    label={emp.full_name}
+                    value={`${Number(emp.leave_days_used || 0)} дена`}
+                    theme={theme}
+                  />
                 ))}
               </div>
             </div>
@@ -1040,14 +1117,57 @@ export default function App() {
   )
 }
 
-function Kpi({ icon, value, label, styleIcon }) {
+function MenuItem({ active, onClick, children }) {
   return (
-    <div style={styles.kpiCard}>
+    <div
+      style={{
+        ...styles.menuItem,
+        ...(active ? styles.menuItemActive : {}),
+      }}
+      onClick={onClick}
+    >
+      {children}
+    </div>
+  )
+}
+
+function Card({ children, theme }) {
+  return (
+    <div
+      style={{
+        ...styles.card,
+        background: theme.card,
+        borderColor: theme.border,
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+function Kpi({ icon, value, label, styleIcon, theme }) {
+  return (
+    <div
+      style={{
+        ...styles.kpiCard,
+        background: theme.card,
+        borderColor: theme.border,
+      }}
+    >
       <div style={styleIcon}>{icon}</div>
       <div>
         <h2 style={styles.kpiNumber}>{value}</h2>
-        <div style={styles.kpiLabel}>{label}</div>
+        <div style={{ ...styles.kpiLabel, color: theme.muted }}>{label}</div>
       </div>
+    </div>
+  )
+}
+
+function ReportLine({ label, value, theme }) {
+  return (
+    <div style={{ ...styles.reportLine, borderColor: theme.line, color: theme.text }}>
+      <span>{label}</span>
+      <b>{value}</b>
     </div>
   )
 }
@@ -1058,14 +1178,11 @@ const styles = {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
-    background: '#f4fbfb',
   },
   shell: {
     minHeight: '100vh',
     display: 'flex',
-    background: '#f4fbfb',
     fontFamily: 'Arial',
-    color: '#111827',
   },
   sidebar: {
     width: 270,
@@ -1157,6 +1274,7 @@ const styles = {
     maxWidth: 1550,
     margin: '0 auto',
     boxSizing: 'border-box',
+    width: '100%',
   },
   topbar: {
     display: 'flex',
@@ -1172,14 +1290,12 @@ const styles = {
   },
   pageSubtitle: {
     marginTop: 6,
-    color: '#667085',
   },
   navRight: {
     display: 'flex',
     alignItems: 'center',
     gap: 12,
     flexWrap: 'wrap',
-    justifyContent: 'flex-end',
   },
   kpiGrid: {
     display: 'grid',
@@ -1188,7 +1304,6 @@ const styles = {
     marginBottom: 20,
   },
   kpiCard: {
-    background: '#fff',
     borderRadius: 18,
     padding: 20,
     border: '1px solid #d8eeee',
@@ -1248,11 +1363,9 @@ const styles = {
     fontSize: 30,
   },
   kpiLabel: {
-    color: '#667085',
     marginTop: 4,
   },
   card: {
-    background: '#fff',
     padding: 20,
     borderRadius: 18,
     border: '1px solid #d8eeee',
@@ -1260,7 +1373,6 @@ const styles = {
     boxShadow: '0 10px 30px rgba(15,118,110,.06)',
   },
   calendarCard: {
-    background: '#fff',
     borderRadius: 18,
     overflow: 'hidden',
     border: '1px solid #d8eeee',
@@ -1295,7 +1407,6 @@ const styles = {
     fontWeight: 'bold',
     padding: '10px 0',
     borderBottom: '1px solid #e5f5f5',
-    color: '#667085',
   },
   calendarGrid: {
     display: 'grid',
@@ -1306,7 +1417,6 @@ const styles = {
     borderRight: '1px solid #edf5f5',
     borderBottom: '1px solid #edf5f5',
     padding: 8,
-    background: '#fff',
   },
   dayNumber: {
     width: 28,
@@ -1357,6 +1467,15 @@ const styles = {
     cursor: 'pointer',
     fontWeight: 800,
   },
+  themeButton: {
+    background: '#0f766e',
+    color: '#fff',
+    border: 'none',
+    padding: '10px 14px',
+    borderRadius: 10,
+    cursor: 'pointer',
+    fontWeight: 800,
+  },
   logout: {
     background: '#fff',
     border: '1px solid #0f766e',
@@ -1370,7 +1489,6 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-    background: '#fff',
     border: '1px solid #d8eeee',
     borderRadius: 12,
     padding: '8px 10px',
@@ -1439,7 +1557,6 @@ const styles = {
     gap: 10,
   },
   muted: {
-    color: '#667085',
     fontSize: 13,
     marginTop: 4,
   },
@@ -1455,9 +1572,9 @@ const styles = {
     gridTemplateColumns: 'repeat(2, 1fr)',
     gap: 16,
     marginTop: 20,
+    marginBottom: 20,
   },
   reportBox: {
-    background: '#fff',
     border: '1px solid #d8eeee',
     borderRadius: 16,
     padding: 18,
@@ -1467,11 +1584,9 @@ const styles = {
     justifyContent: 'space-between',
     padding: '10px 0',
     borderBottom: '1px solid #eef7f7',
-    color: '#334155',
   },
   loginCard: {
     width: 380,
-    background: '#fff',
     padding: 30,
     borderRadius: 18,
     border: '1px solid #d8eeee',
@@ -1484,7 +1599,6 @@ const styles = {
     fontWeight: 900,
   },
   loginSubtitle: {
-    color: '#667085',
     marginTop: 4,
     marginBottom: 22,
   },
