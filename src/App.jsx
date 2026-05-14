@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import jsPDF from 'jspdf'
+import html2canvas from 'html2canvas'
 
 const supabase = createClient(
   'https://iynyzhiyddexvpxmodxi.supabase.co',
   '  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5bnl6aGl5ZGRleHZweG1vZHhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MTk3NjYsImV4cCI6MjA5Mjk5NTc2Nn0.V0_R1YPyCvKAqvE50J-oafL4lRXgnWOtsIPzwZcgyRU'
 )
 
-const VERSION = 'v1.24'
+const VERSION = 'v1.25'
 const APP_NAME = 'SAGA апликација за одмори'
 const EMAIL_FUNCTION_URL =
   'https://iynyzhiyddexvpxmodxi.supabase.co/functions/v1/send-email-notification'
@@ -39,6 +41,8 @@ async function sendEmailNotification(payload) {
 }
 
 export default function App() {
+  const reportRef = useRef(null)
+
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activePage, setActivePage] = useState('overview')
@@ -104,7 +108,6 @@ export default function App() {
 
   async function loadEmployees(userEmail) {
     const { data, error } = await supabase.from('employees').select('*').order('full_name')
-
     if (error) return alert(error.message)
 
     setEmployees(data || [])
@@ -113,7 +116,6 @@ export default function App() {
 
   async function loadLeaves() {
     const { data, error } = await supabase.from('leave_requests').select('*').order('start_date')
-
     if (error) return alert(error.message)
 
     setLeaves(data || [])
@@ -192,7 +194,6 @@ export default function App() {
     }
 
     const emp = employees.find((e) => e.id === absenceEmployeeId)
-
     if (!emp) return alert('Не е пронајден вработен')
 
     const { error } = await supabase.from('leave_requests').insert({
@@ -314,6 +315,43 @@ export default function App() {
     await loadEmployees(session.user.email)
   }
 
+  async function exportReportsPdf() {
+    try {
+      if (!reportRef.current) return
+
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+      })
+
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF('p', 'mm', 'a4')
+
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      const imgWidth = pageWidth - 20
+      const imgHeight = (canvas.height * imgWidth) / canvas.width
+
+      let heightLeft = imgHeight
+      let position = 10
+
+      pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight)
+      heightLeft -= pageHeight
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight + 10
+        pdf.addPage()
+        pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight)
+        heightLeft -= pageHeight
+      }
+
+      pdf.save(`SAGA-izvestai-${formatDate(new Date())}.pdf`)
+    } catch (err) {
+      console.error(err)
+      alert('PDF export не успеа.')
+    }
+  }
+
   function countDays(start, end) {
     const startDate = new Date(start)
     const endDate = new Date(end)
@@ -389,18 +427,22 @@ export default function App() {
     if (leave.reason === 'Нејавено отсуство') return '#7c3aed'
 
     const colors = [
-      '#0f9b8e',
-      '#15b8a6',
-      '#28c7b7',
-      '#0ea5a3',
-      '#0891b2',
-      '#22c55e',
-      '#14b8a6',
-      '#06b6d4',
-      '#3b82f6',
-      '#8b5cf6',
+      '#dc2626',
+      '#16a34a',
+      '#2563eb',
       '#f59e0b',
-      '#ef4444',
+      '#9333ea',
+      '#0f766e',
+      '#e11d48',
+      '#0891b2',
+      '#ea580c',
+      '#4f46e5',
+      '#65a30d',
+      '#be123c',
+      '#0284c7',
+      '#ca8a04',
+      '#7c2d12',
+      '#0d9488',
     ]
 
     const empIndex = employees.findIndex((e) => e.id === leave.employee_id)
@@ -939,8 +981,17 @@ export default function App() {
         )}
 
         {showReports && (
-          <div style={styles.card}>
-            <h3>Извештаи</h3>
+          <div ref={reportRef} style={styles.card}>
+            <div style={styles.reportHeader}>
+              <div>
+                <h3>Извештаи</h3>
+                <p style={styles.muted}>Преглед на барања, отсуства и искористени денови.</p>
+              </div>
+
+              <button style={styles.button} onClick={exportReportsPdf}>
+                Export PDF
+              </button>
+            </div>
 
             <div style={styles.kpiGrid}>
               <Kpi icon="📄" value={leaves.length} label="Вкупно барања" styleIcon={styles.kpiIcon} />
@@ -1009,7 +1060,6 @@ const styles = {
     alignItems: 'center',
     background: '#f4fbfb',
   },
-
   shell: {
     minHeight: '100vh',
     display: 'flex',
@@ -1017,7 +1067,6 @@ const styles = {
     fontFamily: 'Arial',
     color: '#111827',
   },
-
   sidebar: {
     width: 270,
     minHeight: '100vh',
@@ -1031,14 +1080,12 @@ const styles = {
     flexDirection: 'column',
     boxShadow: '10px 0 30px rgba(15,118,110,.18)',
   },
-
   brand: {
     display: 'flex',
     alignItems: 'center',
     gap: 12,
     marginBottom: 35,
   },
-
   brandIcon: {
     width: 46,
     height: 46,
@@ -1051,25 +1098,21 @@ const styles = {
     fontWeight: 900,
     boxShadow: '0 12px 24px rgba(94,234,212,.25)',
   },
-
   brandTitle: {
     fontSize: 28,
     fontWeight: 900,
     letterSpacing: 1,
   },
-
   brandSub: {
     fontSize: 13,
     color: '#9ff5ea',
     marginTop: 2,
   },
-
   menu: {
     display: 'flex',
     flexDirection: 'column',
     gap: 10,
   },
-
   menuItem: {
     padding: '14px 15px',
     borderRadius: 13,
@@ -1078,13 +1121,11 @@ const styles = {
     cursor: 'pointer',
     userSelect: 'none',
   },
-
   menuItemActive: {
     background: 'linear-gradient(135deg, #14b8a6, #0891b2)',
     color: '#fff',
     boxShadow: '0 12px 26px rgba(20,184,166,.28)',
   },
-
   sidebarUser: {
     marginTop: 'auto',
     padding: 14,
@@ -1095,7 +1136,6 @@ const styles = {
     gap: 12,
     border: '1px solid rgba(255,255,255,.12)',
   },
-
   avatar: {
     width: 42,
     height: 42,
@@ -1106,13 +1146,11 @@ const styles = {
     justifyContent: 'center',
     fontWeight: 900,
   },
-
   sidebarRole: {
     fontSize: 12,
     color: '#b9fff6',
     marginTop: 3,
   },
-
   main: {
     flex: 1,
     padding: 26,
@@ -1120,7 +1158,6 @@ const styles = {
     margin: '0 auto',
     boxSizing: 'border-box',
   },
-
   topbar: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -1128,18 +1165,15 @@ const styles = {
     gap: 20,
     marginBottom: 22,
   },
-
   pageTitle: {
     margin: 0,
     fontSize: 32,
     fontWeight: 900,
   },
-
   pageSubtitle: {
     marginTop: 6,
     color: '#667085',
   },
-
   navRight: {
     display: 'flex',
     alignItems: 'center',
@@ -1147,14 +1181,12 @@ const styles = {
     flexWrap: 'wrap',
     justifyContent: 'flex-end',
   },
-
   kpiGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(4, 1fr)',
     gap: 16,
     marginBottom: 20,
   },
-
   kpiCard: {
     background: '#fff',
     borderRadius: 18,
@@ -1165,7 +1197,6 @@ const styles = {
     gap: 16,
     boxShadow: '0 10px 30px rgba(15,118,110,.08)',
   },
-
   kpiIcon: {
     width: 54,
     height: 54,
@@ -1177,7 +1208,6 @@ const styles = {
     justifyContent: 'center',
     fontSize: 24,
   },
-
   kpiIconGreen: {
     width: 54,
     height: 54,
@@ -1190,7 +1220,6 @@ const styles = {
     fontSize: 28,
     fontWeight: 900,
   },
-
   kpiIconYellow: {
     width: 54,
     height: 54,
@@ -1202,7 +1231,6 @@ const styles = {
     justifyContent: 'center',
     fontSize: 24,
   },
-
   kpiIconRed: {
     width: 54,
     height: 54,
@@ -1215,17 +1243,14 @@ const styles = {
     fontSize: 30,
     fontWeight: 900,
   },
-
   kpiNumber: {
     margin: 0,
     fontSize: 30,
   },
-
   kpiLabel: {
     color: '#667085',
     marginTop: 4,
   },
-
   card: {
     background: '#fff',
     padding: 20,
@@ -1234,7 +1259,6 @@ const styles = {
     marginBottom: 20,
     boxShadow: '0 10px 30px rgba(15,118,110,.06)',
   },
-
   calendarCard: {
     background: '#fff',
     borderRadius: 18,
@@ -1243,7 +1267,6 @@ const styles = {
     marginBottom: 20,
     boxShadow: '0 10px 30px rgba(15,118,110,.06)',
   },
-
   calendarTop: {
     padding: 20,
     display: 'flex',
@@ -1251,24 +1274,20 @@ const styles = {
     alignItems: 'center',
     borderBottom: '1px solid #e5f5f5',
   },
-
   calendarTitleWrap: {
     display: 'flex',
     alignItems: 'center',
     gap: 18,
   },
-
   calendarTitle: {
     margin: 0,
     fontSize: 24,
   },
-
   monthName: {
     color: '#0f766e',
     fontWeight: 800,
     fontSize: 18,
   },
-
   weekHeader: {
     display: 'grid',
     gridTemplateColumns: 'repeat(7,1fr)',
@@ -1278,12 +1297,10 @@ const styles = {
     borderBottom: '1px solid #e5f5f5',
     color: '#667085',
   },
-
   calendarGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(7,1fr)',
   },
-
   day: {
     minHeight: 120,
     borderRight: '1px solid #edf5f5',
@@ -1291,7 +1308,6 @@ const styles = {
     padding: 8,
     background: '#fff',
   },
-
   dayNumber: {
     width: 28,
     height: 28,
@@ -1301,13 +1317,11 @@ const styles = {
     alignItems: 'center',
     marginBottom: 5,
   },
-
   today: {
     background: '#0f766e',
     color: '#fff',
     fontWeight: 700,
   },
-
   event: {
     color: '#fff',
     padding: '4px 6px',
@@ -1319,14 +1333,12 @@ const styles = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
   },
-
   employeeInfo: {
     display: 'flex',
     gap: 25,
     fontSize: 18,
     flexWrap: 'wrap',
   },
-
   input: {
     width: '100%',
     padding: 12,
@@ -1336,7 +1348,6 @@ const styles = {
     boxSizing: 'border-box',
     outline: 'none',
   },
-
   button: {
     background: 'linear-gradient(135deg, #14b8a6, #0f766e)',
     color: '#fff',
@@ -1346,7 +1357,6 @@ const styles = {
     cursor: 'pointer',
     fontWeight: 800,
   },
-
   logout: {
     background: '#fff',
     border: '1px solid #0f766e',
@@ -1356,7 +1366,6 @@ const styles = {
     cursor: 'pointer',
     fontWeight: 700,
   },
-
   passwordMini: {
     display: 'flex',
     alignItems: 'center',
@@ -1366,7 +1375,6 @@ const styles = {
     borderRadius: 12,
     padding: '8px 10px',
   },
-
   passwordInput: {
     width: 210,
     padding: '9px 10px',
@@ -1374,7 +1382,6 @@ const styles = {
     borderRadius: 8,
     outline: 'none',
   },
-
   passwordButton: {
     padding: '9px 13px',
     borderRadius: 8,
@@ -1384,7 +1391,6 @@ const styles = {
     cursor: 'pointer',
     fontWeight: 700,
   },
-
   leave: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -1394,7 +1400,6 @@ const styles = {
     marginBottom: 10,
     gap: 10,
   },
-
   approve: {
     background: '#16a34a',
     color: '#fff',
@@ -1404,7 +1409,6 @@ const styles = {
     cursor: 'pointer',
     fontWeight: 700,
   },
-
   reject: {
     background: '#dc2626',
     color: '#fff',
@@ -1414,7 +1418,6 @@ const styles = {
     cursor: 'pointer',
     fontWeight: 700,
   },
-
   smallButton: {
     marginLeft: 8,
     padding: '8px 12px',
@@ -1425,7 +1428,6 @@ const styles = {
     cursor: 'pointer',
     fontWeight: 'bold',
   },
-
   employeeBox: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -1436,27 +1438,30 @@ const styles = {
     marginBottom: 10,
     gap: 10,
   },
-
   muted: {
     color: '#667085',
     fontSize: 13,
     marginTop: 4,
   },
-
+  reportHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 10,
+  },
   reportGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(2, 1fr)',
     gap: 16,
     marginTop: 20,
   },
-
   reportBox: {
     background: '#fff',
     border: '1px solid #d8eeee',
     borderRadius: 16,
     padding: 18,
   },
-
   reportLine: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -1464,7 +1469,6 @@ const styles = {
     borderBottom: '1px solid #eef7f7',
     color: '#334155',
   },
-
   loginCard: {
     width: 380,
     background: '#fff',
@@ -1473,20 +1477,17 @@ const styles = {
     border: '1px solid #d8eeee',
     boxShadow: '0 20px 50px rgba(15,118,110,.13)',
   },
-
   loginLogo: {
     margin: 0,
     color: '#0f766e',
     fontSize: 42,
     fontWeight: 900,
   },
-
   loginSubtitle: {
     color: '#667085',
     marginTop: 4,
     marginBottom: 22,
   },
-
   version: {
     position: 'fixed',
     right: 15,
