@@ -6,7 +6,7 @@ const supabase = createClient(
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5bnl6aGl5ZGRleHZweG1vZHhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MTk3NjYsImV4cCI6MjA5Mjk5NTc2Nn0.V0_R1YPyCvKAqvE50J-oafL4lRXgnWOtsIPzwZcgyRU'
 )
 
-const VERSION = 'v1.22'
+const VERSION = 'v1.23'
 const APP_NAME = 'SAGA апликација за одмори'
 const EMAIL_FUNCTION_URL =
   'https://iynyzhiyddexvpxmodxi.supabase.co/functions/v1/send-email-notification'
@@ -41,6 +41,7 @@ async function sendEmailNotification(payload) {
 export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [activePage, setActivePage] = useState('overview')
 
   const [role, setRole] = useState('')
   const [fullName, setFullName] = useState('')
@@ -103,7 +104,6 @@ export default function App() {
 
   async function loadEmployees(userEmail) {
     const { data, error } = await supabase.from('employees').select('*').order('full_name')
-
     if (error) return alert(error.message)
 
     setEmployees(data || [])
@@ -112,7 +112,6 @@ export default function App() {
 
   async function loadLeaves() {
     const { data, error } = await supabase.from('leave_requests').select('*').order('start_date')
-
     if (error) return alert(error.message)
 
     setLeaves(data || [])
@@ -412,7 +411,6 @@ export default function App() {
   }, [leaves, myEmployee])
 
   const pendingLeaves = leaves.filter((l) => l.status === 'pending')
-
   const approvedCount = leaves.filter((l) => l.status === 'approved').length
   const pendingCount = leaves.filter((l) => l.status === 'pending').length
   const rejectedCount = leaves.filter((l) => l.status === 'rejected').length
@@ -470,6 +468,13 @@ export default function App() {
     )
   }
 
+  const showOverview = activePage === 'overview'
+  const showCalendar = showOverview || activePage === 'calendar'
+  const showRequests = showOverview || activePage === 'requests'
+  const showAbsences = showOverview || activePage === 'absences'
+  const showEmployees = role === 'hr' && activePage === 'employees'
+  const showReports = role === 'hr' && activePage === 'reports'
+
   return (
     <div style={styles.shell}>
       <aside style={styles.sidebar}>
@@ -482,12 +487,69 @@ export default function App() {
         </div>
 
         <div style={styles.menu}>
-          <div style={{ ...styles.menuItem, ...styles.menuItemActive }}>▣ Преглед</div>
-          <div style={styles.menuItem}>▦ Календар</div>
-          <div style={styles.menuItem}>☑ Барања за одмор</div>
-          <div style={styles.menuItem}>◷ Отсуства</div>
-          {role === 'hr' && <div style={styles.menuItem}>◎ Вработени</div>}
-          {role === 'hr' && <div style={styles.menuItem}>▤ Извештаи</div>}
+          <div
+            style={{
+              ...styles.menuItem,
+              ...(activePage === 'overview' ? styles.menuItemActive : {}),
+            }}
+            onClick={() => setActivePage('overview')}
+          >
+            ▣ Преглед
+          </div>
+
+          <div
+            style={{
+              ...styles.menuItem,
+              ...(activePage === 'calendar' ? styles.menuItemActive : {}),
+            }}
+            onClick={() => setActivePage('calendar')}
+          >
+            ▦ Календар
+          </div>
+
+          <div
+            style={{
+              ...styles.menuItem,
+              ...(activePage === 'requests' ? styles.menuItemActive : {}),
+            }}
+            onClick={() => setActivePage('requests')}
+          >
+            ☑ Барања за одмор
+          </div>
+
+          <div
+            style={{
+              ...styles.menuItem,
+              ...(activePage === 'absences' ? styles.menuItemActive : {}),
+            }}
+            onClick={() => setActivePage('absences')}
+          >
+            ◷ Отсуства
+          </div>
+
+          {role === 'hr' && (
+            <div
+              style={{
+                ...styles.menuItem,
+                ...(activePage === 'employees' ? styles.menuItemActive : {}),
+              }}
+              onClick={() => setActivePage('employees')}
+            >
+              ◎ Вработени
+            </div>
+          )}
+
+          {role === 'hr' && (
+            <div
+              style={{
+                ...styles.menuItem,
+                ...(activePage === 'reports' ? styles.menuItemActive : {}),
+              }}
+              onClick={() => setActivePage('reports')}
+            >
+              ▤ Извештаи
+            </div>
+          )}
         </div>
 
         <div style={styles.sidebarUser}>
@@ -508,8 +570,15 @@ export default function App() {
       <main style={styles.main}>
         <div style={styles.topbar}>
           <div>
-            <h1 style={styles.pageTitle}>Добредојде, {fullName}</h1>
-            <div style={styles.pageSubtitle}>{APP_NAME}</div>
+            <h1 style={styles.pageTitle}>
+              {activePage === 'overview' && 'Преглед'}
+              {activePage === 'calendar' && 'Календар'}
+              {activePage === 'requests' && 'Барања за одмор'}
+              {activePage === 'absences' && 'Отсуства'}
+              {activePage === 'employees' && 'Вработени'}
+              {activePage === 'reports' && 'Извештаи'}
+            </h1>
+            <div style={styles.pageSubtitle}>Добредојде, {fullName}</div>
           </div>
 
           <div style={styles.navRight}>
@@ -533,7 +602,7 @@ export default function App() {
           </div>
         </div>
 
-        {role === 'hr' && (
+        {role === 'hr' && showOverview && (
           <div style={styles.kpiGrid}>
             <div style={styles.kpiCard}>
               <div style={styles.kpiIcon}>📄</div>
@@ -569,90 +638,92 @@ export default function App() {
           </div>
         )}
 
-        <div style={styles.calendarCard}>
-          <div style={styles.calendarTop}>
-            <div style={styles.calendarTitleWrap}>
-              <h3 style={styles.calendarTitle}>Календар</h3>
-              <span style={styles.monthName}>{monthName}</span>
+        {showCalendar && (
+          <div style={styles.calendarCard}>
+            <div style={styles.calendarTop}>
+              <div style={styles.calendarTitleWrap}>
+                <h3 style={styles.calendarTitle}>Календар</h3>
+                <span style={styles.monthName}>{monthName}</span>
+              </div>
+
+              <div>
+                <button style={styles.smallButton} onClick={() => setCurrentDate(new Date())}>
+                  Денес
+                </button>
+
+                <button
+                  style={styles.smallButton}
+                  onClick={() =>
+                    setCurrentDate(
+                      new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1)
+                    )
+                  }
+                >
+                  ‹
+                </button>
+
+                <button
+                  style={styles.smallButton}
+                  onClick={() =>
+                    setCurrentDate(
+                      new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1)
+                    )
+                  }
+                >
+                  ›
+                </button>
+              </div>
             </div>
 
-            <div>
-              <button style={styles.smallButton} onClick={() => setCurrentDate(new Date())}>
-                Денес
-              </button>
+            <div style={styles.weekHeader}>
+              <div>Пон</div>
+              <div>Вто</div>
+              <div>Сре</div>
+              <div>Чет</div>
+              <div>Пет</div>
+              <div>Саб</div>
+              <div>Нед</div>
+            </div>
 
-              <button
-                style={styles.smallButton}
-                onClick={() =>
-                  setCurrentDate(
-                    new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1)
-                  )
-                }
-              >
-                ‹
-              </button>
+            <div style={styles.calendarGrid}>
+              {getCalendarDays().map((day, index) => {
+                const dayLeaves = getLeavesForDay(day)
+                const isToday = day && formatDate(day) === todayString
 
-              <button
-                style={styles.smallButton}
-                onClick={() =>
-                  setCurrentDate(
-                    new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1)
-                  )
-                }
-              >
-                ›
-              </button>
+                return (
+                  <div key={index} style={styles.day}>
+                    {day && (
+                      <>
+                        <div style={{ ...styles.dayNumber, ...(isToday ? styles.today : {}) }}>
+                          {day.getDate()}
+                        </div>
+
+                        {dayLeaves.map((leave, i) => {
+                          const emp = getEmployeeById(leave.employee_id)
+
+                          return (
+                            <div
+                              key={leave.id}
+                              style={{
+                                ...styles.event,
+                                background: getEventColor(leave, i),
+                              }}
+                              title={`${emp?.full_name || 'Вработен'} - ${leave.reason || 'Одмор'}`}
+                            >
+                              {emp?.full_name || 'Вработен'}
+                            </div>
+                          )
+                        })}
+                      </>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
+        )}
 
-          <div style={styles.weekHeader}>
-            <div>Пон</div>
-            <div>Вто</div>
-            <div>Сре</div>
-            <div>Чет</div>
-            <div>Пет</div>
-            <div>Саб</div>
-            <div>Нед</div>
-          </div>
-
-          <div style={styles.calendarGrid}>
-            {getCalendarDays().map((day, index) => {
-              const dayLeaves = getLeavesForDay(day)
-              const isToday = day && formatDate(day) === todayString
-
-              return (
-                <div key={index} style={styles.day}>
-                  {day && (
-                    <>
-                      <div style={{ ...styles.dayNumber, ...(isToday ? styles.today : {}) }}>
-                        {day.getDate()}
-                      </div>
-
-                      {dayLeaves.map((leave, i) => {
-                        const emp = getEmployeeById(leave.employee_id)
-
-                        return (
-                          <div
-                            key={leave.id}
-                            style={{
-                              ...styles.event,
-                              background: getEventColor(leave, i),
-                            }}
-                            title={`${emp?.full_name || 'Вработен'} - ${leave.reason || 'Одмор'}`}
-                          >
-                            {emp?.full_name || 'Вработен'}
-                          </div>
-                        )
-                      })}
-                    </>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {myEmployee && (
+        {myEmployee && (showOverview || activePage === 'requests') && (
           <div style={styles.card}>
             <h3>Мој одмор</h3>
 
@@ -676,7 +747,7 @@ export default function App() {
           </div>
         )}
 
-        {role === 'hr' && (
+        {role === 'hr' && showAbsences && (
           <div style={styles.card}>
             <h3>Нејавено отсуство</h3>
 
@@ -714,7 +785,7 @@ export default function App() {
           </div>
         )}
 
-        {role === 'hr' && (
+        {showEmployees && (
           <div style={styles.card}>
             <h3>HR уредување на вработени</h3>
 
@@ -790,89 +861,142 @@ export default function App() {
           </div>
         )}
 
-        <div style={styles.card}>
-          <h3>Поднеси барање</h3>
+        {showRequests && (
+          <>
+            <div style={styles.card}>
+              <h3>Поднеси барање</h3>
 
-          <input
-            style={styles.input}
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-          />
+              <input
+                style={styles.input}
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
 
-          <input
-            style={styles.input}
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-          />
+              <input
+                style={styles.input}
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
 
-          <select style={styles.input} value={reason} onChange={(e) => setReason(e.target.value)}>
-            <option value="Одмор">Одмор</option>
-            <option value="Боледување">Боледување</option>
-          </select>
+              <select
+                style={styles.input}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              >
+                <option value="Одмор">Одмор</option>
+                <option value="Боледување">Боледување</option>
+              </select>
 
-          <button style={styles.button} onClick={submitLeaveRequest}>
-            Испрати барање
-          </button>
-        </div>
-
-        <div style={styles.card}>
-          <h3>Мои барања</h3>
-
-          {myLeaves.length === 0 && <p>Нема барања.</p>}
-
-          {myLeaves.map((leave) => (
-            <div key={leave.id} style={styles.leave}>
-              <div>
-                <b>
-                  {formatDisplayDate(leave.start_date)} - {formatDisplayDate(leave.end_date)}
-                </b>
-                <div>{leave.reason}</div>
-              </div>
-
-              <div>{translateStatus(leave.status)}</div>
+              <button style={styles.button} onClick={submitLeaveRequest}>
+                Испрати барање
+              </button>
             </div>
-          ))}
-        </div>
 
-        {role === 'hr' && (
-          <div style={styles.card}>
-            <h3>HR Одобрување</h3>
+            <div style={styles.card}>
+              <h3>Мои барања</h3>
 
-            {pendingLeaves.length === 0 && <p>Нема нови барања.</p>}
+              {myLeaves.length === 0 && <p>Нема барања.</p>}
 
-            {pendingLeaves.map((leave) => {
-              const emp = employees.find((e) => e.id === leave.employee_id)
-
-              return (
+              {myLeaves.map((leave) => (
                 <div key={leave.id} style={styles.leave}>
                   <div>
-                    <b>{emp?.full_name}</b>
-                    <div>
+                    <b>
                       {formatDisplayDate(leave.start_date)} - {formatDisplayDate(leave.end_date)}
-                    </div>
+                    </b>
                     <div>{leave.reason}</div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <button
-                      style={styles.approve}
-                      onClick={() => updateLeaveStatus(leave, 'approved')}
-                    >
-                      Одобри
-                    </button>
-
-                    <button
-                      style={styles.reject}
-                      onClick={() => updateLeaveStatus(leave, 'rejected')}
-                    >
-                      Одбиј
-                    </button>
-                  </div>
+                  <div>{translateStatus(leave.status)}</div>
                 </div>
-              )
-            })}
+              ))}
+            </div>
+
+            {role === 'hr' && (
+              <div style={styles.card}>
+                <h3>HR Одобрување</h3>
+
+                {pendingLeaves.length === 0 && <p>Нема нови барања.</p>}
+
+                {pendingLeaves.map((leave) => {
+                  const emp = employees.find((e) => e.id === leave.employee_id)
+
+                  return (
+                    <div key={leave.id} style={styles.leave}>
+                      <div>
+                        <b>{emp?.full_name}</b>
+                        <div>
+                          {formatDisplayDate(leave.start_date)} -{' '}
+                          {formatDisplayDate(leave.end_date)}
+                        </div>
+                        <div>{leave.reason}</div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <button
+                          style={styles.approve}
+                          onClick={() => updateLeaveStatus(leave, 'approved')}
+                        >
+                          Одобри
+                        </button>
+
+                        <button
+                          style={styles.reject}
+                          onClick={() => updateLeaveStatus(leave, 'rejected')}
+                        >
+                          Одбиј
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        )}
+
+        {showReports && (
+          <div style={styles.card}>
+            <h3>Извештаи</h3>
+
+            <div style={styles.kpiGrid}>
+              <div style={styles.kpiCard}>
+                <div style={styles.kpiIcon}>📄</div>
+                <div>
+                  <h2 style={styles.kpiNumber}>{leaves.length}</h2>
+                  <div style={styles.kpiLabel}>Вкупно барања</div>
+                </div>
+              </div>
+
+              <div style={styles.kpiCard}>
+                <div style={styles.kpiIconGreen}>✓</div>
+                <div>
+                  <h2 style={styles.kpiNumber}>{approvedCount}</h2>
+                  <div style={styles.kpiLabel}>Одобрени</div>
+                </div>
+              </div>
+
+              <div style={styles.kpiCard}>
+                <div style={styles.kpiIconYellow}>⏱</div>
+                <div>
+                  <h2 style={styles.kpiNumber}>{pendingCount}</h2>
+                  <div style={styles.kpiLabel}>На чекање</div>
+                </div>
+              </div>
+
+              <div style={styles.kpiCard}>
+                <div style={styles.kpiIconRed}>×</div>
+                <div>
+                  <h2 style={styles.kpiNumber}>{rejectedCount}</h2>
+                  <div style={styles.kpiLabel}>Одбиени</div>
+                </div>
+              </div>
+            </div>
+
+            <p style={styles.muted}>
+              Овде подоцна може да додадеме PDF export, графикони и месечни извештаи.
+            </p>
           </div>
         )}
 
@@ -904,8 +1028,7 @@ const styles = {
     minHeight: '100vh',
     position: 'sticky',
     top: 0,
-    background:
-      'linear-gradient(180deg, #061b2a 0%, #073344 45%, #0f766e 100%)',
+    background: 'linear-gradient(180deg, #061b2a 0%, #073344 45%, #0f766e 100%)',
     color: '#fff',
     padding: 22,
     boxSizing: 'border-box',
@@ -957,7 +1080,8 @@ const styles = {
     borderRadius: 13,
     color: '#d7fffa',
     fontWeight: 700,
-    cursor: 'default',
+    cursor: 'pointer',
+    userSelect: 'none',
   },
 
   menuItemActive: {
