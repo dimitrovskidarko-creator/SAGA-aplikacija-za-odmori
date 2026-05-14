@@ -524,7 +524,7 @@ export default function App() {
             }}
             onClick={() => setActivePage('absences')}
           >
-            ◷ Отсуства
+            ◷ Нејавено отсуство
           </div>
 
           {role === 'hr' && (
@@ -574,7 +574,7 @@ export default function App() {
               {activePage === 'overview' && 'Преглед'}
               {activePage === 'calendar' && 'Календар'}
               {activePage === 'requests' && 'Барања за одмор'}
-              {activePage === 'absences' && 'Отсуства'}
+              {activePage === 'absences' && 'Нејавено отсуство'}
               {activePage === 'employees' && 'Вработени'}
               {activePage === 'reports' && 'Извештаи'}
             </h1>
