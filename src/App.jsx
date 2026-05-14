@@ -3,10 +3,10 @@ import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
   'https://iynyzhiyddexvpxmodxi.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml5bnl6aGl5ZGRleHZweG1vZHhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MTk3NjYsImV4cCI6MjA5Mjk5NTc2Nn0.V0_R1YPyCvKAqvE50J-oafL4lRXgnWOtsIPzwZcgyRU'
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJIUzI1NiIsInJlZiI6Iml5bnl6aGl5ZGRleHZweG1vZHhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MTk3NjYsImV4cCI6MjA5Mjk5NTc2Nn0.V0_R1YPyCvKAqvE50J-oafL4lRXgnWOtsIPzwZcgyRU'
 )
 
-const VERSION = 'v1.23'
+const VERSION = 'v1.24'
 const APP_NAME = 'SAGA апликација за одмори'
 const EMAIL_FUNCTION_URL =
   'https://iynyzhiyddexvpxmodxi.supabase.co/functions/v1/send-email-notification'
@@ -104,6 +104,7 @@ export default function App() {
 
   async function loadEmployees(userEmail) {
     const { data, error } = await supabase.from('employees').select('*').order('full_name')
+
     if (error) return alert(error.message)
 
     setEmployees(data || [])
@@ -112,6 +113,7 @@ export default function App() {
 
   async function loadLeaves() {
     const { data, error } = await supabase.from('leave_requests').select('*').order('start_date')
+
     if (error) return alert(error.message)
 
     setLeaves(data || [])
@@ -190,6 +192,7 @@ export default function App() {
     }
 
     const emp = employees.find((e) => e.id === absenceEmployeeId)
+
     if (!emp) return alert('Не е пронајден вработен')
 
     const { error } = await supabase.from('leave_requests').insert({
@@ -411,9 +414,13 @@ export default function App() {
   }, [leaves, myEmployee])
 
   const pendingLeaves = leaves.filter((l) => l.status === 'pending')
+
   const approvedCount = leaves.filter((l) => l.status === 'approved').length
   const pendingCount = leaves.filter((l) => l.status === 'pending').length
   const rejectedCount = leaves.filter((l) => l.status === 'rejected').length
+  const vacationCount = leaves.filter((l) => l.reason === 'Одмор').length
+  const sickCount = leaves.filter((l) => l.reason === 'Боледување').length
+  const unexcusedCount = leaves.filter((l) => l.reason === 'Нејавено отсуство').length
 
   const months = [
     'Јануари',
@@ -517,15 +524,17 @@ export default function App() {
             ☑ Барања за одмор
           </div>
 
-          <div
-            style={{
-              ...styles.menuItem,
-              ...(activePage === 'absences' ? styles.menuItemActive : {}),
-            }}
-            onClick={() => setActivePage('absences')}
-          >
-            ◷ Нејавено отсуство
-          </div>
+          {role === 'hr' && (
+            <div
+              style={{
+                ...styles.menuItem,
+                ...(activePage === 'absences' ? styles.menuItemActive : {}),
+              }}
+              onClick={() => setActivePage('absences')}
+            >
+              ◷ Нејавено отсуство
+            </div>
+          )}
 
           {role === 'hr' && (
             <div
@@ -604,37 +613,10 @@ export default function App() {
 
         {role === 'hr' && showOverview && (
           <div style={styles.kpiGrid}>
-            <div style={styles.kpiCard}>
-              <div style={styles.kpiIcon}>📄</div>
-              <div>
-                <h2 style={styles.kpiNumber}>{leaves.length}</h2>
-                <div style={styles.kpiLabel}>Вкупно барања</div>
-              </div>
-            </div>
-
-            <div style={styles.kpiCard}>
-              <div style={styles.kpiIconGreen}>✓</div>
-              <div>
-                <h2 style={styles.kpiNumber}>{approvedCount}</h2>
-                <div style={styles.kpiLabel}>Одобрени</div>
-              </div>
-            </div>
-
-            <div style={styles.kpiCard}>
-              <div style={styles.kpiIconYellow}>⏱</div>
-              <div>
-                <h2 style={styles.kpiNumber}>{pendingCount}</h2>
-                <div style={styles.kpiLabel}>На чекање</div>
-              </div>
-            </div>
-
-            <div style={styles.kpiCard}>
-              <div style={styles.kpiIconRed}>×</div>
-              <div>
-                <h2 style={styles.kpiNumber}>{rejectedCount}</h2>
-                <div style={styles.kpiLabel}>Одбиени</div>
-              </div>
-            </div>
+            <Kpi icon="📄" value={leaves.length} label="Вкупно барања" styleIcon={styles.kpiIcon} />
+            <Kpi icon="✓" value={approvedCount} label="Одобрени" styleIcon={styles.kpiIconGreen} />
+            <Kpi icon="⏱" value={pendingCount} label="На чекање" styleIcon={styles.kpiIconYellow} />
+            <Kpi icon="×" value={rejectedCount} label="Одбиени" styleIcon={styles.kpiIconRed} />
           </div>
         )}
 
@@ -961,47 +943,60 @@ export default function App() {
             <h3>Извештаи</h3>
 
             <div style={styles.kpiGrid}>
-              <div style={styles.kpiCard}>
-                <div style={styles.kpiIcon}>📄</div>
-                <div>
-                  <h2 style={styles.kpiNumber}>{leaves.length}</h2>
-                  <div style={styles.kpiLabel}>Вкупно барања</div>
-                </div>
-              </div>
-
-              <div style={styles.kpiCard}>
-                <div style={styles.kpiIconGreen}>✓</div>
-                <div>
-                  <h2 style={styles.kpiNumber}>{approvedCount}</h2>
-                  <div style={styles.kpiLabel}>Одобрени</div>
-                </div>
-              </div>
-
-              <div style={styles.kpiCard}>
-                <div style={styles.kpiIconYellow}>⏱</div>
-                <div>
-                  <h2 style={styles.kpiNumber}>{pendingCount}</h2>
-                  <div style={styles.kpiLabel}>На чекање</div>
-                </div>
-              </div>
-
-              <div style={styles.kpiCard}>
-                <div style={styles.kpiIconRed}>×</div>
-                <div>
-                  <h2 style={styles.kpiNumber}>{rejectedCount}</h2>
-                  <div style={styles.kpiLabel}>Одбиени</div>
-                </div>
-              </div>
+              <Kpi icon="📄" value={leaves.length} label="Вкупно барања" styleIcon={styles.kpiIcon} />
+              <Kpi icon="✓" value={approvedCount} label="Одобрени" styleIcon={styles.kpiIconGreen} />
+              <Kpi icon="⏱" value={pendingCount} label="На чекање" styleIcon={styles.kpiIconYellow} />
+              <Kpi icon="×" value={rejectedCount} label="Одбиени" styleIcon={styles.kpiIconRed} />
             </div>
 
-            <p style={styles.muted}>
-              Овде подоцна може да додадеме PDF export, графикони и месечни извештаи.
-            </p>
+            <div style={styles.reportGrid}>
+              <div style={styles.reportBox}>
+                <h3>Преглед по тип</h3>
+
+                <div style={styles.reportLine}>
+                  <span>Одмор</span>
+                  <b>{vacationCount}</b>
+                </div>
+
+                <div style={styles.reportLine}>
+                  <span>Боледување</span>
+                  <b>{sickCount}</b>
+                </div>
+
+                <div style={styles.reportLine}>
+                  <span>Нејавено отсуство</span>
+                  <b>{unexcusedCount}</b>
+                </div>
+              </div>
+
+              <div style={styles.reportBox}>
+                <h3>Искористени денови по вработен</h3>
+
+                {employees.map((emp) => (
+                  <div key={emp.id} style={styles.reportLine}>
+                    <span>{emp.full_name}</span>
+                    <b>{Number(emp.leave_days_used || 0)} дена</b>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
         <div style={styles.version}>{VERSION}</div>
       </main>
+    </div>
+  )
+}
+
+function Kpi({ icon, value, label, styleIcon }) {
+  return (
+    <div style={styles.kpiCard}>
+      <div style={styleIcon}>{icon}</div>
+      <div>
+        <h2 style={styles.kpiNumber}>{value}</h2>
+        <div style={styles.kpiLabel}>{label}</div>
+      </div>
     </div>
   )
 }
@@ -1446,6 +1441,28 @@ const styles = {
     color: '#667085',
     fontSize: 13,
     marginTop: 4,
+  },
+
+  reportGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: 16,
+    marginTop: 20,
+  },
+
+  reportBox: {
+    background: '#fff',
+    border: '1px solid #d8eeee',
+    borderRadius: 16,
+    padding: 18,
+  },
+
+  reportLine: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    padding: '10px 0',
+    borderBottom: '1px solid #eef7f7',
+    color: '#334155',
   },
 
   loginCard: {
