@@ -31,9 +31,9 @@ async function sendEmailNotification(payload) {
     const data = await res.json().catch(() => ({}))
 
     if (!res.ok) {
-      console.error('EMAIL ERROR:', data)
-      alert('Запишано е, но email не се испрати. Провери Edge Function logs.')
-    }
+  console.error('EMAIL ERROR:', data)
+  alert(JSON.stringify(data, null, 2))
+}
   } catch (err) {
     console.error('EMAIL CRASH:', err)
     alert('Запишано е, но email функцијата падна. Провери Console.')
